@@ -50,3 +50,18 @@ export async function uploadFileToS3(presignedUrl: string, file: File): Promise<
         throw new Error("Failed to upload file to S3");
     }
 }
+
+export async function triggerOCR(jobId: string, s3Key: string, fileType: string) {
+  const res = await fetch('/api/process', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobId, s3Key, fileType }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to process text");
+  }
+
+  return res.json();
+}
