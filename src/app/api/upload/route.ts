@@ -7,6 +7,35 @@ import { Job } from "@/models/Job";
 import { JobState } from "@/types/job";
 import { JobStateLog } from "@/models/JobStateLog";
 
+
+
+
+//////*******************************
+/*
+    Frontend selects file
+            │
+            ▼
+    POST /api/upload
+            │
+            ▼
+    Server validates file
+            │
+            ▼
+    Generate UUID filename
+            │
+            ▼
+    Generate S3 signed URL
+            │
+            ▼
+    Create Job in MongoDB*
+            │
+            ▼
+    Return signed URL
+            │
+            ▼
+    Frontend uploads file directly to S3
+*/
+/////////////////////////////////////////////////
 // Initialize the S3 Client
 const s3Client = new S3Client({
     region: process.env.AWS_REGION!,
