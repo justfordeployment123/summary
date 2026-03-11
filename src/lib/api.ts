@@ -111,3 +111,23 @@ export async function generateFreeSummary(data: GenerateFreePayload): Promise<Ge
 
     return res.json();
 }
+
+
+export interface CheckoutPayload {
+    jobId: string;
+    upsells: string[]; // e.g., ["legal_formatting", "tone_rewrite"]
+}
+
+/**
+ * Step 5: Ask backend to create a Stripe Checkout Session
+ */
+export async function createCheckoutSession(data: CheckoutPayload): Promise<{ url: string }> {
+    const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+
+    if (!res.ok) throw new Error("Failed to initialize checkout.");
+    return res.json();
+}
