@@ -13,6 +13,7 @@
     "@aws-sdk/client-textract": "^3.1004.0",
     "@aws-sdk/s3-request-presigner": "^3.1004.0",
     "dotenv": "^17.3.1",
+    "lucide-react": "^0.577.0",
     "mammoth": "^1.11.0",
     "mongoose": "^9.2.4",
     "next": "16.1.6",
