@@ -131,3 +131,30 @@ export async function createCheckoutSession(data: CheckoutPayload): Promise<{ ur
     if (!res.ok) throw new Error("Failed to initialize checkout.");
     return res.json();
 }
+
+export interface GeneratePaidPayload {
+    jobId: string;
+    extractedText: string;
+}
+
+export interface GeneratePaidResponse {
+    detailedBreakdown: string;
+}
+
+/**
+ * Step 6: Generates the final, detailed breakdown after payment.
+ */
+export async function generatePaidSummary(data: GeneratePaidPayload): Promise<GeneratePaidResponse> {
+    const res = await fetch('/api/generate-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to generate detailed breakdown.");
+    }
+
+    return res.json();
+}

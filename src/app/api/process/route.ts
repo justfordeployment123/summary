@@ -44,8 +44,8 @@ export async function POST(request: Request) {
         await job.save();
 
 
-        console.log(s3Client);
-        console.log(textractClient);
+        // console.log(s3Client);
+        // console.log(textractClient);
         console.log("Starting OCR Processing for Job ID:", jobId);
         let extractedText = "";
         let confidenceFlag = false;
