@@ -16,6 +16,7 @@
     "mammoth": "^1.11.0",
     "mongoose": "^9.2.4",
     "next": "16.1.6",
+    "openai": "^6.27.0",
     "pdf-parse-new": "^2.0.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",

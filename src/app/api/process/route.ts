@@ -60,7 +60,7 @@ export async function POST(request: Request) {
                 });
 
                 const response = await textractClient.send(command);
-                console.log("Textract Response:", response.Blocks);
+                // console.log("Textract Response:", response.Blocks);
                 let totalConfidence = 0;
                 let wordCount = 0;
 

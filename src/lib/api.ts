@@ -83,3 +83,31 @@ export async function triggerOCR(data: OCRPayload): Promise<OCRResponse> {
 
     return res.json();
 }
+
+export interface GenerateFreePayload {
+    jobId: string;
+    extractedText: string;
+}
+
+export interface GenerateFreeResponse {
+    summary: string;
+    urgency: string;
+}
+
+/**
+ * Step 4: Sends the extracted text to OpenAI for the free summary.
+ */
+export async function generateFreeSummary(data: GenerateFreePayload): Promise<GenerateFreeResponse> {
+    const res = await fetch("/api/generate-free", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to generate AI summary.");
+    }
+
+    return res.json();
+}

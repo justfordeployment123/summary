@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { requestUploadUrl, uploadFileToS3, triggerOCR } from "@/lib/api";
+import { requestUploadUrl, uploadFileToS3, triggerOCR, generateFreeSummary } from "@/lib/api";
 export default function Home() {
     // Form Data States
     const [category, setCategory] = useState("");
@@ -79,11 +79,16 @@ export default function Home() {
                 // You could set a UI state here to show a small warning banner to the user later
             }
 
-            setUploadStatus("4/4: Text extracted! Preparing AI summary...");
-            console.log("Success! Extracted Text:", ocrResult.extractedText);
-            console.log("OCR Confidence Warning Flag:", ocrResult.confidenceFlag);
+            // 4. Generate the AI Summary
+            setUploadStatus("4/4: AI is analyzing your document...");
+            const aiResult = await generateFreeSummary({
+                jobId,
+                extractedText: ocrResult.extractedText,
+            });
 
-            // Step 4 (Next Task): Send this extracted text to OpenAI
+            setUploadStatus("Complete! Your summary is ready.");
+            console.log("FINAL SUMMARY:", aiResult.summary);
+            console.log("URGENCY:", aiResult.urgency);
         } catch (error: any) {
             console.error("Upload/Processing failed:", error);
             setUploadStatus(`Error: ${error.message}`);
