@@ -51,17 +51,35 @@ export async function uploadFileToS3(presignedUrl: string, file: File): Promise<
     }
 }
 
-export async function triggerOCR(jobId: string, s3Key: string, fileType: string) {
-  const res = await fetch('/api/process', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jobId, s3Key, fileType }),
-  });
+// Add these interfaces at the top with your others
+export interface OCRPayload {
+    jobId: string;
+    s3Key: string;
+    fileType: string;
+}
 
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || "Failed to process text");
-  }
+export interface OCRResponse {
+    message: string;
+    extractedText: string;
+    confidenceFlag: boolean;
+}
 
-  return res.json();
+// Add this function at the bottom of the file
+/**
+ * Step 3: Tells the backend to read the file sitting in S3 using AWS Textract or Parsers.
+ */
+export async function triggerOCR(data: OCRPayload): Promise<OCRResponse> {
+    const res = await fetch("/api/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        // If Textract fails (e.g., < 70% confidence), this throws the error to the UI
+        throw new Error(errorData.message || "Failed to read the document. Please ensure it is clear and legible.");
+    }
+
+    return res.json();
 }

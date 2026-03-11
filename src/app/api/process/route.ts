@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server";
 import { TextractClient, DetectDocumentTextCommand } from "@aws-sdk/client-textract";
+import { S3Client, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import pdfParse from "pdf-parse-new";
+import mammoth from "mammoth";
 import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
-import { JobStateLog } from "@/models/JobStateLog";
 import { JobState } from "@/types/job";
+import { JobStateLog } from "@/models/JobStateLog";
 
-// Initialize Textract Client
+// Initialize AWS Clients (Both will seamlessly use eu-west-2 from your .env)
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION!,
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    },
+});
+
 const textractClient = new TextractClient({
     region: process.env.AWS_REGION!,
     credentials: {
@@ -26,92 +37,115 @@ export async function POST(request: Request) {
         const job = await Job.findById(jobId);
         if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-        // 1. Advance State: UPLOADED -> OCR_PROCESSING
+        // Advance State to OCR_PROCESSING
         job.previous_state = job.status;
         job.status = JobState.OCR_PROCESSING;
         job.state_transitioned_at = new Date();
         await job.save();
 
-        await JobStateLog.create({
-            job_id: job._id,
-            from_state: JobState.UPLOADED,
-            to_state: JobState.OCR_PROCESSING,
-            triggered_by: "system_process_route",
-        });
 
+        console.log(s3Client);
+        console.log(textractClient);
+        console.log("Starting OCR Processing for Job ID:", jobId);
         let extractedText = "";
         let confidenceFlag = false;
 
-        // 2. Route based on file type
-        if (fileType === "image/jpeg" || fileType === "image/png") {
-            // Tell AWS Textract to read the file directly from S3!
-            const command = new DetectDocumentTextCommand({
-                Document: {
-                    S3Object: {
-                        Bucket: process.env.AWS_S3_BUCKET_NAME!,
-                        Name: s3Key,
+        try {
+            if (fileType === "image/jpeg" || fileType === "image/png") {
+                // Highly Optimized: Textract reads directly from S3 (Zero server memory used!)
+                const command = new DetectDocumentTextCommand({
+                    Document: {
+                        S3Object: { Bucket: process.env.AWS_S3_BUCKET_NAME!, Name: s3Key },
                     },
-                },
-            });
+                });
 
-            const response = await textractClient.send(command);
+                const response = await textractClient.send(command);
+                console.log("Textract Response:", response.Blocks);
+                let totalConfidence = 0;
+                let wordCount = 0;
 
-            // 3. Process Textract Blocks & Calculate Confidence
-            let totalConfidence = 0;
-            let wordCount = 0;
-
-            response.Blocks?.forEach((block) => {
-                if (block.BlockType === "LINE" && block.Text) {
-                    extractedText += block.Text + "\n";
-                    if (block.Confidence) {
-                        totalConfidence += block.Confidence;
-                        wordCount++;
+                response.Blocks?.forEach((block) => {
+                    if (block.BlockType === "LINE" && block.Text) {
+                        extractedText += block.Text + "\n";
+                        if (block.Confidence) {
+                            totalConfidence += block.Confidence;
+                            wordCount++;
+                        }
                     }
+                });
+
+                const averageConfidence = wordCount > 0 ? totalConfidence / wordCount : 0;
+
+                if (averageConfidence < 70) {
+                    throw new Error("OCR_FAILED");
+                } else if (averageConfidence >= 70 && averageConfidence < 85) {
+                    confidenceFlag = true;
                 }
-            });
+            } else {
+                // PDF and DOCX parsers (Requires bringing the buffer into memory)
+                const getObjCmd = new GetObjectCommand({
+                    Bucket: process.env.AWS_S3_BUCKET_NAME!,
+                    Key: s3Key,
+                });
+                const s3Response = await s3Client.send(getObjCmd);
+                const byteArray = await s3Response.Body?.transformToByteArray();
+                const buffer = Buffer.from(byteArray!);
 
-            const averageConfidence = wordCount > 0 ? totalConfidence / wordCount : 0;
-            console.log(`OCR Average Confidence: ${averageConfidence}%`);
+                if (fileType === "application/pdf") {
+                    const pdfData = await pdfParse(buffer);
+                    extractedText = pdfData.text;
+                } else if (fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+                    const docxData = await mammoth.extractRawText({ buffer });
+                    extractedText = docxData.value;
+                }
 
-            // 4. Enforce Client Confidence Thresholds
-            if (averageConfidence < 70) {
-                // Mark as failed
-                job.status = JobState.OCR_FAILED;
-                await job.save();
-                // NOTE: You would also trigger the S3 deletion here as per specs
-                return NextResponse.json({ error: "OCR_FAILED", message: "Document unreadable. Please re-upload." }, { status: 422 });
-            } else if (averageConfidence >= 70 && averageConfidence < 85) {
-                confidenceFlag = true; // Low quality flagged
+                if (!extractedText || extractedText.trim().length === 0) {
+                    throw new Error("EMPTY_DOCUMENT");
+                }
             }
-        } else {
-            // Placeholder for PDF/DOCX direct parsing
-            extractedText = "Extracted text from PDF goes here...";
+        } catch (extractionError: any) {
+            console.error("Extraction Failed:", extractionError);
+
+            job.status = JobState.OCR_FAILED;
+            await job.save();
+
+            // Delete the unreadable file
+            await s3Client.send(
+                new DeleteObjectCommand({
+                    Bucket: process.env.AWS_S3_BUCKET_NAME!,
+                    Key: s3Key,
+                }),
+            );
+
+            const errorMsg =
+                extractionError.message === "OCR_FAILED"
+                    ? "Image quality too low to read clearly. Please re-upload a clearer image."
+                    : "The document appears to be corrupt, password-protected, or unreadable. Please re-upload.";
+
+            return NextResponse.json({ error: "EXTRACTION_FAILED", message: errorMsg }, { status: 422 });
         }
 
-        // 5. Enforce Hard 1,200 Word Limit BEFORE AI Processing
-        const textWords = extractedText.split(/\s+/);
+        // Enforce Hard 1,200 Word Limit BEFORE AI Processing
+        const textWords = extractedText.trim().split(/\s+/);
         if (textWords.length > 1200) {
             extractedText = textWords.slice(0, 1200).join(" ");
-            console.log("Text truncated to 1,200 words.");
         }
 
-        // 6. Advance State: OCR_PROCESSING -> FREE_SUMMARY_GENERATING
+        // Advance State to FREE_SUMMARY_GENERATING
         job.previous_state = job.status;
         job.status = JobState.FREE_SUMMARY_GENERATING;
         await job.save();
 
-        // IMPORTANT: The requirements state the extracted text is NOT permanently stored in the DB.
-        // We return it here so the next function can immediately send it to OpenAI.
         return NextResponse.json(
             {
-                message: "OCR Complete",
+                message: "Extraction Complete",
                 extractedText,
                 confidenceFlag,
             },
             { status: 200 },
         );
     } catch (error) {
-        console.error("OCR Processing Error:", error);
+        console.error("Processing Route Error:", error);
         return NextResponse.json({ error: "Failed to process document" }, { status: 500 });
     }
 }

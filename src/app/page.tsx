@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { requestUploadUrl, uploadFileToS3 } from "@/lib/api";
-
+import { requestUploadUrl, uploadFileToS3, triggerOCR } from "@/lib/api";
 export default function Home() {
     // Form Data States
     const [category, setCategory] = useState("");
@@ -43,17 +42,16 @@ export default function Home() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Final safety check before submission
         if (!file || !category || !firstName || !email) {
             alert("Please fill out all required fields and upload a file.");
             return;
         }
 
         setIsUploading(true);
-        setUploadStatus("1/3: Requesting secure upload URL...");
+        setUploadStatus("1/4: Requesting secure upload URL...");
 
         try {
-            // Step 1: Get the Presigned URL using our clean API service
+            // 1. Get Presigned URL
             const { presignedUrl, s3Key, jobId } = await requestUploadUrl({
                 fileName: file.name,
                 fileType: file.type,
@@ -63,24 +61,36 @@ export default function Home() {
                 marketingConsent,
             });
 
-            setUploadStatus("2/3: Uploading document directly to AWS...");
-
-            // Step 2: Upload the physical file directly to S3
+            // 2. Upload to S3
+            setUploadStatus("2/4: Uploading document directly to AWS...");
             await uploadFileToS3(presignedUrl, file);
 
-            setUploadStatus("3/3: Upload successful! File is secure.");
-            console.log("Success! Job ID:", jobId, "S3 Key:", s3Key);
+            // 3. Trigger OCR Extraction
+            setUploadStatus("3/4: Reading document text securely...");
+            const ocrResult = await triggerOCR({
+                jobId,
+                s3Key,
+                fileType: file.type,
+            });
 
-            // Step 3 (Next Task): Trigger OCR Processing
-            // await triggerOCR({ jobId, s3Key });
+            // Client Specs state that if confidence is between 70-84%, we show a warning but continue
+            if (ocrResult.confidenceFlag) {
+                console.warn("Low OCR confidence flagged. Text might be slightly inaccurate.");
+                // You could set a UI state here to show a small warning banner to the user later
+            }
+
+            setUploadStatus("4/4: Text extracted! Preparing AI summary...");
+            console.log("Success! Extracted Text:", ocrResult.extractedText);
+            console.log("OCR Confidence Warning Flag:", ocrResult.confidenceFlag);
+
+            // Step 4 (Next Task): Send this extracted text to OpenAI
         } catch (error: any) {
-            console.error("Upload process failed:", error);
+            console.error("Upload/Processing failed:", error);
             setUploadStatus(`Error: ${error.message}`);
         } finally {
             setIsUploading(false);
         }
     };
-
     return (
         <div className="max-w-2xl mx-auto mt-12 p-8 bg-white shadow-xl rounded-2xl border border-gray-100">
             <div className="mb-10 text-center">
