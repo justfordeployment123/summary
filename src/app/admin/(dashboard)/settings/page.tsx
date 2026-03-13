@@ -242,7 +242,7 @@ export default function AdminSettingsPage() {
 
     const NAV_ITEMS = [
         ...SECTIONS.map((s) => ({ id: s.title.toLowerCase().replace(/[^a-z]/g, ""), label: s.title })),
-        { id: "pricing", label: "Pricing" },
+        // { id: "pricing", label: "Pricing" },
     ];
 
     const getValue = (key: keyof Settings) => (settings as any)[key] ?? "";
