@@ -10,6 +10,10 @@ export function proxy(request: NextRequest) {
         if (pathname === "/admin/login" || pathname.startsWith("/api/admin/auth/login") || pathname.startsWith("/api/admin/auth/setup")) {
             return NextResponse.next();
         }
+        //allow /api/admin/auth/setup
+        if (pathname.startsWith("/api/admin/auth/setup")) {
+            return NextResponse.next();
+        }
 
         const token = request.cookies.get("admin_token")?.value;
 

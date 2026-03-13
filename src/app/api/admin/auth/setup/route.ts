@@ -7,7 +7,7 @@ export async function POST(request: Request) {
     try {
         // IMPORTANT: Add a secret key check here so no one else can hit this route!
         const { email, password, setupSecret } = await request.json();
-
+        console.log(email, password, setupSecret);
         // Replace 'my_secret_setup_key' with a random word just for this test
         if (setupSecret !== "my_secret_setup_key") {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
