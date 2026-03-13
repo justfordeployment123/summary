@@ -53,6 +53,15 @@ export interface Category {
     createdAt: string;
 }
 
+export interface Upsell {
+    _id: string;
+    name: string;
+    description: string;
+    is_active: boolean;
+    category_prices: Record<string, number>; // Object mapping Category ID to price
+    createdAt: string;
+}
+
 export const adminApi = {
     // --- AUTHENTICATION ---
 
@@ -133,5 +142,42 @@ export const adminApi = {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to delete category");
         return data;
-    }
+    },
+    async getUpsells(): Promise<{ upsells: Upsell[] }> {
+        const res = await fetch("/api/admin/upsells");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to fetch upsells");
+        return data;
+    },
+
+    async createUpsell(payload: Partial<Upsell>): Promise<{ upsell: Upsell }> {
+        const res = await fetch("/api/admin/upsells", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to create upsell");
+        return data;
+    },
+
+    async updateUpsell(id: string, payload: Partial<Upsell>): Promise<{ upsell: Upsell }> {
+        const res = await fetch(`/api/admin/upsells/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to update upsell");
+        return data;
+    },
+
+    async deleteUpsell(id: string): Promise<{ success: boolean }> {
+        const res = await fetch(`/api/admin/upsells/${id}`, {
+            method: "DELETE",
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to delete upsell");
+        return data;
+    },
 };

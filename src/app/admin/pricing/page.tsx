@@ -340,12 +340,26 @@ export default function PricingPage() {
                                 type="number"
                                 required
                                 min={0}
+                                step={1}
                                 value={formData.base_price}
-                                onChange={(e) => setFormData({ ...formData, base_price: Number(e.target.value) })}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    // Only allow whole integers — no decimals
+                                    if (/^\d*$/.test(val)) {
+                                        setFormData({ ...formData, base_price: val === "" ? 0 : parseInt(val, 10) });
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === "." || e.key === ",") e.preventDefault();
+                                }}
                                 className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-sm transition-shadow"
                                 placeholder="e.g. 499"
                             />
-                            <p className="text-xs text-slate-500 mt-1.5 font-medium">= £{(formData.base_price / 100).toFixed(2)}</p>
+                            <p className="text-xs text-slate-500 mt-1.5 font-medium">
+                                {formData.base_price > 0
+                                    ? `= £${(formData.base_price / 100).toFixed(2)}`
+                                    : "Enter amount in pence, e.g. 499 for £4.99"}
+                            </p>
                         </div>
                         <div className="flex items-center gap-3 py-1">
                             <button
@@ -353,13 +367,13 @@ export default function PricingPage() {
                                 role="switch"
                                 aria-checked={formData.is_active}
                                 onClick={() => setFormData({ ...formData, is_active: !formData.is_active })}
-                                className={`relative w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                                className={`relative shrink-0 w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
                                     formData.is_active ? "bg-teal-500" : "bg-slate-200"
                                 }`}
                             >
                                 <span
-                                    className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${
-                                        formData.is_active ? "translate-x-5" : "translate-x-1"
+                                    className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                                        formData.is_active ? "translate-x-4" : "translate-x-0"
                                     }`}
                                 />
                             </button>
