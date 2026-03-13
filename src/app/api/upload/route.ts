@@ -4,39 +4,10 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuidv4 } from "uuid";
 import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
-import { JobState } from "@/types/job";
+import { Category } from "@/models/Category";
 import { JobStateLog } from "@/models/JobStateLog";
+import { JobState } from "@/types/job";
 
-
-
-
-//////*******************************
-/*
-    Frontend selects file
-            │
-            ▼
-    POST /api/upload
-            │
-            ▼
-    Server validates file
-            │
-            ▼
-    Generate UUID filename
-            │
-            ▼
-    Generate S3 signed URL
-            │
-            ▼
-    Create Job in MongoDB*
-            │
-            ▼
-    Return signed URL
-            │
-            ▼
-    Frontend uploads file directly to S3
-*/
-/////////////////////////////////////////////////
-// Initialize the S3 Client
 const s3Client = new S3Client({
     region: process.env.AWS_REGION!,
     credentials: {
@@ -50,18 +21,28 @@ const ALLOWED_MIME_TYPES = ["application/pdf", "application/vnd.openxmlformats-o
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { fileName, fileType, category, firstName, email, marketingConsent } = body;
+        // Here, 'category' is actually the Category DB _id sent from the frontend
+        const { fileName, fileType, category: categoryId, firstName, email, marketingConsent } = body;
 
         // 1. Initial Server-Side Validation
         if (!ALLOWED_MIME_TYPES.includes(fileType)) {
             return NextResponse.json({ error: "Invalid file type." }, { status: 400 });
         }
 
-        // 2. Generate secure UUIDs for S3 and our Reference ID
-        const fileExtension = fileName.split(".").pop();
-        const s3Key = `${uuidv4()}.${fileExtension}`; // Never use original filename [cite: 39]
+        // 2. Connect to MongoDB early to validate category
+        await dbConnect();
 
-        // 3. Create the Presigned URL command
+        // 3. Securely lookup the actual category name
+        const matchedCategory = await Category.findById(categoryId);
+        if (!matchedCategory || !matchedCategory.is_active) {
+            return NextResponse.json({ error: "Invalid or inactive category selected." }, { status: 400 });
+        }
+
+        // 4. Generate secure UUIDs for S3 and our Reference ID
+        const fileExtension = fileName.split(".").pop();
+        const s3Key = `${uuidv4()}.${fileExtension}`;
+
+        // 5. Create the Presigned URL command
         const command = new PutObjectCommand({
             Bucket: process.env.AWS_S3_BUCKET_NAME!,
             Key: s3Key,
@@ -70,20 +51,17 @@ export async function POST(request: Request) {
 
         const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 60 });
 
-        // 4. Connect to MongoDB and Create the Job Record
-        await dbConnect();
-
-        // The access_token is automatically generated as a UUID v4 by our Mongoose schema
+        // 6. Create the Job Record using both the ID and the secure DB name
+        // 6. Create the Job Record
         const newJob = await Job.create({
             reference_id: s3Key,
-            category_id: category,
+            category_id: matchedCategory._id, // Now natively handles the ObjectId reference!
             user_email: email,
             user_name: firstName,
             marketing_consent: marketingConsent || false,
             status: JobState.UPLOADED,
         });
-
-        // 5. Write the initial state to the JobStateLog (Audit Trail Requirement)
+        // 7. Write the initial state to the JobStateLog
         await JobStateLog.create({
             job_id: newJob._id,
             from_state: "INIT",
@@ -91,7 +69,7 @@ export async function POST(request: Request) {
             triggered_by: "system_upload_init",
         });
 
-        // 6. Return the URL and the secure keys to the frontend
+        // 8. Return the URL and the secure keys to the frontend
         return NextResponse.json(
             {
                 presignedUrl,

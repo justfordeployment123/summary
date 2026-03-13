@@ -20,8 +20,9 @@ const JobSchema = new mongoose.Schema(
             default: JobState.UPLOADED,
         },
         category_id: {
-            type: String,
+            type: mongoose.Schema.Types.ObjectId,
             required: true,
+            ref: "Category",
         },
         user_email: {
             type: String,
@@ -39,7 +40,9 @@ const JobSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
-        disclaimer_acknowledged_at: { type: Date },
+        disclaimer_acknowledged_at: {
+            type: Date,
+        },
         urgency: {
             type: String,
             enum: ["Routine", "Important", "Time-Sensitive"],
@@ -51,8 +54,22 @@ const JobSchema = new mongoose.Schema(
             type: Date,
             default: Date.now,
         },
+
+        // --- NEW FIELDS ADDED ---
+        processed_at: {
+            type: Date,
+        },
+        deleted_at: {
+            type: Date,
+        },
     },
-    { timestamps: true },
+    {
+        // Force Mongoose to use snake_case for timestamps so it matches your DB queries
+        timestamps: {
+            createdAt: "created_at",
+            updatedAt: "updated_at",
+        },
+    },
 );
 
 export const Job = mongoose.models.Job || mongoose.model("Job", JobSchema);

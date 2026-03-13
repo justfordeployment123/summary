@@ -111,7 +111,7 @@ export default function AdminDashboard() {
             )}
 
             {/* Stuck jobs alert */}
-            {stats.stuckJobs.length > 0 && (
+            {stats.stuckJobs?.length > 0 && (
                 <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4">
                     <p className="font-semibold text-red-800 text-sm mb-3">
                         {stats.stuckJobs.length} job{stats.stuckJobs.length > 1 ? "s" : ""} stuck in processing
@@ -165,7 +165,7 @@ export default function AdminDashboard() {
                     <h3 className="text-sm font-bold text-slate-700 mb-4">Monthly OpenAI Usage</h3>
                     <div className="space-y-3">
                         <div className="flex justify-between text-xs text-slate-500 mb-1">
-                            <span>{stats.tokenUsageMonth.toLocaleString()} tokens used</span>
+                            <span>{stats.tokenUsageMonth?.toLocaleString()} tokens used</span>
                             <span className={capPercent >= 80 ? "text-amber-600 font-bold" : ""}>{capPercent}%</span>
                         </div>
                         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -174,7 +174,7 @@ export default function AdminDashboard() {
                                 style={{ width: `${Math.min(capPercent, 100)}%` }}
                             />
                         </div>
-                        <div className="text-xs text-slate-400">Cap: {stats.tokenCapMonth.toLocaleString()} tokens</div>
+                        <div className="text-xs text-slate-400">Cap: {stats.tokenCapMonth?.toLocaleString()} tokens</div>
                     </div>
                 </div>
             </div>

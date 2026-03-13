@@ -1,18 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { requestUploadUrl, uploadFileToS3, triggerOCR, generateFreeSummary } from "@/lib/api";
-
-const CATEGORIES = [
-    "Legal",
-    "Medical / NHS",
-    "Government / HMRC / DWP",
-    "Financial / Banking",
-    "Housing / Landlord / Council",
-    "Employment / HR",
-    "Insurance",
-    "General / Other",
-];
 
 type UrgencyLevel = "Routine" | "Important" | "Time-Sensitive";
 
@@ -45,6 +34,11 @@ interface SummaryData {
     jobId: string;
 }
 
+interface CategoryOption {
+    _id: string;
+    name: string;
+}
+
 const STEPS = [
     { num: 1, label: "Upload" },
     { num: 2, label: "Summary" },
@@ -52,8 +46,12 @@ const STEPS = [
 ];
 
 export default function Home() {
+    // Dynamic Categories State
+    const [categories, setCategories] = useState<CategoryOption[]>([]);
+    const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+
     // Form state
-    const [category, setCategory] = useState("");
+    const [categoryId, setCategoryId] = useState("");
     const [firstName, setFirstName] = useState("");
     const [email, setEmail] = useState("");
     const [marketingConsent, setMarketingConsent] = useState(false);
@@ -65,7 +63,7 @@ export default function Home() {
 
     // Processing state
     const [isUploading, setIsUploading] = useState(false);
-    const [currentStep, setCurrentStep] = useState(0); // 0–4 for progress steps
+    const [currentStep, setCurrentStep] = useState(0);
     const [uploadStatus, setUploadStatus] = useState("");
     const [isError, setIsError] = useState(false);
 
@@ -81,6 +79,24 @@ export default function Home() {
         "AI is analysing your letter…",
         "Complete! Your summary is ready.",
     ];
+
+    // Fetch categories on mount
+    useEffect(() => {
+        async function fetchCategories() {
+            try {
+                const res = await fetch("/api/categories");
+                const data = await res.json();
+                if (data.categories) {
+                    setCategories(data.categories);
+                }
+            } catch (error) {
+                console.error("Failed to load categories");
+            } finally {
+                setIsLoadingCategories(false);
+            }
+        }
+        fetchCategories();
+    }, []);
 
     const handleFileChange = (selectedFile: File) => {
         if (selectedFile.size > 10 * 1024 * 1024) {
@@ -108,7 +124,7 @@ export default function Home() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!file || !category || !firstName || !email) {
+        if (!file || !categoryId || !firstName || !email) {
             setUploadStatus("Please complete all required fields and upload a document.");
             setIsError(true);
             return;
@@ -133,7 +149,7 @@ export default function Home() {
             const { presignedUrl, s3Key, jobId } = await requestUploadUrl({
                 fileName: file.name,
                 fileType: file.type,
-                category,
+                category: categoryId, // Pass the database ID, not the string name
                 firstName: firstName.trim(),
                 email: email.trim(),
                 marketingConsent,
@@ -207,7 +223,6 @@ export default function Home() {
 
     return (
         <div className="min-h-screen bg-slate-50" style={{ fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif" }}>
-            {/* Header */}
             <header className="bg-white border-b border-slate-200">
                 <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -228,7 +243,6 @@ export default function Home() {
             </header>
 
             <main className="max-w-2xl mx-auto px-4 py-10">
-                {/* Progress steps */}
                 <div className="flex items-center justify-center gap-2 mb-10">
                     {STEPS.map((s, i) => (
                         <div key={s.num} className="flex items-center gap-2">
@@ -259,7 +273,6 @@ export default function Home() {
                     ))}
                 </div>
 
-                {/* ── FORM VIEW ── */}
                 {view === "form" && (
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="px-8 pt-8 pb-6 border-b border-slate-100">
@@ -268,30 +281,28 @@ export default function Home() {
                         </div>
 
                         <form onSubmit={handleSubmit} className="px-8 py-6 space-y-5">
-                            {/* Category */}
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                                     Letter Type <span className="text-red-500">*</span>
                                 </label>
                                 <select
-                                    value={category}
-                                    onChange={(e) => setCategory(e.target.value)}
+                                    value={categoryId}
+                                    onChange={(e) => setCategoryId(e.target.value)}
                                     required
-                                    disabled={isUploading}
+                                    disabled={isUploading || isLoadingCategories}
                                     className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:opacity-60 transition"
                                 >
                                     <option value="" disabled>
-                                        Select a category…
+                                        {isLoadingCategories ? "Loading categories..." : "Select a category…"}
                                     </option>
-                                    {CATEGORIES.map((cat) => (
-                                        <option key={cat} value={cat}>
-                                            {cat}
+                                    {categories.map((cat) => (
+                                        <option key={cat._id} value={cat._id}>
+                                            {cat.name}
                                         </option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Name + Email */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">
@@ -324,7 +335,6 @@ export default function Home() {
                                 </div>
                             </div>
 
-                            {/* Marketing consent */}
                             <label className="flex items-start gap-3 cursor-pointer select-none">
                                 <input
                                     type="checkbox"
@@ -338,7 +348,6 @@ export default function Home() {
                                 </span>
                             </label>
 
-                            {/* File drop zone */}
                             <div
                                 onDragOver={(e) => {
                                     e.preventDefault();
@@ -356,7 +365,6 @@ export default function Home() {
                             >
                                 <input
                                     type="file"
-                                    id="file-upload"
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                     onChange={(e) => {
                                         const f = e.target.files?.[0];
@@ -393,12 +401,9 @@ export default function Home() {
                                 )}
                             </div>
 
-                            {/* Status / error message */}
                             {uploadStatus && (
                                 <div
-                                    className={`px-4 py-3 rounded-lg text-sm font-medium flex items-start gap-2 ${
-                                        isError ? "bg-red-50 text-red-700 border border-red-200" : "bg-teal-50 text-teal-800 border border-teal-200"
-                                    }`}
+                                    className={`px-4 py-3 rounded-lg text-sm font-medium flex items-start gap-2 ${isError ? "bg-red-50 text-red-700 border border-red-200" : "bg-teal-50 text-teal-800 border border-teal-200"}`}
                                 >
                                     {isError ? (
                                         <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -423,7 +428,6 @@ export default function Home() {
                                 </div>
                             )}
 
-                            {/* Progress bar */}
                             {isUploading && (
                                 <div className="space-y-2">
                                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -436,7 +440,6 @@ export default function Home() {
                                 </div>
                             )}
 
-                            {/* Submit */}
                             <button
                                 type="submit"
                                 disabled={isUploading}
@@ -452,10 +455,8 @@ export default function Home() {
                     </div>
                 )}
 
-                {/* ── SUMMARY VIEW ── */}
                 {view === "summary" && summaryData && urgencyConfig && (
                     <div className="space-y-4">
-                        {/* Urgency + Summary card */}
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="px-8 pt-7 pb-6 border-b border-slate-100">
                                 <div className="flex items-center justify-between flex-wrap gap-3">
@@ -474,7 +475,6 @@ export default function Home() {
                             </div>
                         </div>
 
-                        {/* Disclaimer banner — REQUIRED before paid options */}
                         <div className="bg-amber-50 border border-amber-200 rounded-xl px-6 py-4">
                             <div className="flex items-start gap-3">
                                 <svg className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -493,7 +493,6 @@ export default function Home() {
                             </div>
                         </div>
 
-                        {/* Upsell / Checkout card */}
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="px-8 pt-7 pb-3 border-b border-slate-100">
                                 <h3 className="text-lg font-bold text-slate-900">Need to know exactly what to do next?</h3>
@@ -503,7 +502,6 @@ export default function Home() {
                             </div>
 
                             <div className="px-8 py-5">
-                                {/* Feature list */}
                                 <ul className="space-y-2 mb-6">
                                     {[
                                         "Section-by-section structured breakdown",
@@ -520,7 +518,6 @@ export default function Home() {
                                     ))}
                                 </ul>
 
-                                {/* Disclaimer acknowledgement checkbox — MANDATORY */}
                                 <label className="flex items-start gap-3 mb-5 cursor-pointer select-none p-3 rounded-lg bg-slate-50 border border-slate-200">
                                     <input
                                         type="checkbox"
@@ -533,7 +530,6 @@ export default function Home() {
                                     </span>
                                 </label>
 
-                                {/* Error message */}
                                 {uploadStatus && isError && (
                                     <div className="mb-4 px-4 py-3 rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200">
                                         {uploadStatus}
@@ -552,12 +548,11 @@ export default function Home() {
                             </div>
                         </div>
 
-                        {/* Start over */}
                         <button
                             onClick={() => {
                                 setView("form");
                                 setFile(null);
-                                setCategory("");
+                                setCategoryId("");
                                 setFirstName("");
                                 setEmail("");
                                 setMarketingConsent(false);
