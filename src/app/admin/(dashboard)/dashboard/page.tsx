@@ -1,39 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-interface DashboardStats {
-    totalJobs: number;
-    completedToday: number;
-    pendingJobs: number;
-    failedJobs: number;
-    revenueToday: number;
-    revenueMonth: number;
-    tokenUsageMonth: number;
-    tokenCapMonth: number;
-    stuckJobs: StuckJob[];
-    recentJobs: RecentJob[];
-    capWarning: boolean;
-}
-
-interface StuckJob {
-    jobId: string;
-    referenceId: string;
-    status: string;
-    stuckFor: number; // minutes
-    email: string;
-}
-
-interface RecentJob {
-    jobId: string;
-    referenceId: string;
-    status: string;
-    category: string;
-    email: string;
-    urgency: string;
-    createdAt: string;
-    amount?: number;
-}
+import { adminApi, DashboardStats } from "@/lib/adminApi"; // Import API and Types
 
 const STATUS_BADGE: Record<string, string> = {
     UPLOADED: "bg-slate-100 text-slate-600",
@@ -62,10 +30,10 @@ export default function AdminDashboard() {
 
     async function fetchStats() {
         try {
-            const res = await fetch("/api/admin/dashboard");
-            if (!res.ok) throw new Error("Failed to load dashboard");
-            const data = await res.json();
+            // Use the centralized API client
+            const data = await adminApi.getDashboardStats();
             setStats(data);
+            setError(""); // Clear previous errors on successful fetch
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -76,9 +44,8 @@ export default function AdminDashboard() {
     async function regenerateJob(jobId: string) {
         if (!confirm("Regenerate breakdown for this job?")) return;
         try {
-            const res = await fetch(`/api/admin/jobs/${jobId}/regenerate`, { method: "POST" });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            // Use the centralized API client
+            await adminApi.regenerateJob(jobId);
             alert("Regeneration triggered successfully.");
             fetchStats();
         } catch (err: any) {
@@ -180,7 +147,6 @@ export default function AdminDashboard() {
 
             {/* Revenue + Token usage */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Revenue */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
                     <h3 className="text-sm font-bold text-slate-700 mb-4">Revenue</h3>
                     <div className="space-y-3">
@@ -195,7 +161,6 @@ export default function AdminDashboard() {
                     </div>
                 </div>
 
-                {/* Token Usage */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
                     <h3 className="text-sm font-bold text-slate-700 mb-4">Monthly OpenAI Usage</h3>
                     <div className="space-y-3">

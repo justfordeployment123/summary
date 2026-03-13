@@ -569,3 +569,85 @@ AWS S3 automatically deletes the originally uploaded file within 24 hours [cite:
 Looking at it laid out like this, you can see that the State Machine we discussed earlier (`UPLOADED`, `OCR_PROCESSING`, `AWAITING_PAYMENT`, etc.) acts as the spine of the entire application.
 
 Would you like to move on to Step 4 of Phase 1 and write the `/api/process` endpoint that triggers AWS Textract and transitions the state to `OCR_PROCESSING`?
+
+---
+
+## Admin Requirements
+
+### 1. Authentication & Access
+
+- The admin logs into a secure web-based dashboard using an email and password
+- This admin authentication is completely separate from the standard user flow
+- The system enforces session expiry for security
+
+### 2. Dashboard Alerts & Monitoring
+
+**What is Shown:**
+
+- Alert panel that flags jobs stuck in processing, webhook errors, or warnings if the monthly OpenAI cap is reached
+- If the monthly API limit is reached or nearly reached, a prominent alert flag is displayed on the dashboard until the admin acknowledges it or resets the cap
+- Recent event and error logs directly in the dashboard showing timestamp, event type, job ID, and severity level
+
+### 3. Revenue, Cost & Token Tracking
+
+**Revenue:**
+
+- Overview of all-time earnings, current month's earnings, and breakdown by category
+
+**Monthly API Costs:**
+
+- Monthly summary showing total tokens used, total estimated costs, and a progress bar tracking usage against the monthly cap
+- Month-by-month historical summary of token usage and costs
+
+### 4. Managing Categories, Pricing & Upsells
+
+**Categories:**
+
+- Initial list of document categories (like Legal, Medical, etc.) is expandable via the admin
+
+**Pricing:**
+
+- Admin can configure the base price for the paid breakdown on a per-category basis
+
+**Upsells:**
+
+- Admin can add, edit, disable, and assign upsell options (like "Tone Rewrite") to specific document categories
+- Admin sets the individual pricing for each upsell per category
+
+### 5. Managing Jobs & Leads
+
+- View a list of all jobs and filter by category, status, and date range
+- Inspect deep details for any specific job, including user info, file metadata, state history audit log, token usage, cost estimates, and urgency indicator
+- View the full state history of any job to help with debugging
+- View the captured first name and email address for each job
+- Export capability to export lead data
+
+### 6. Handling Failures & Refunds
+
+**Regenerate:**
+
+- If a job fails after payment is confirmed, admin is shown a "Regenerate" button to manually retry the AI generation
+- Each attempt is logged with admin ID and timestamp
+
+**Refunds:**
+
+- Admin can issue a refund using a one-click shortcut to the Stripe API from the dashboard
+- Issuing a refund automatically updates the job status to REFUNDED and revokes the user's ability to download the documents
+
+### 7. Configuring AI Behavior & System Rules
+
+**Prompts:**
+
+- Admin can edit the AI prompt templates for both the free summary and the paid breakdown for every individual category
+- Prompts are versioned, allowing the admin to roll back to previous versions
+
+**Limits & Configuration:**
+
+- Configure the global monthly OpenAI spend/token cap, as well as the maximum input and output tokens allowed per request
+- Manually reset the monthly token cap ahead of its automatic reset schedule
+- Configure the exact percentage (defaulting to 80%) at which the system sends automated warning email about API usage
+- Change the OpenAI GPT-4.1 model version
+- Adjust the AWS Textract OCR confidence thresholds (e.g., changing the default 85% flag or 70% reject limits)
+- Configure the exact text shown in the pre-payment legal disclaimer and the mandatory acknowledgement checkbox
+- Configure how long download links remain active before expiring (defaulting to 72 hours)
+- Trigger or schedule the cleanup/deletion of job metadata and adjust how long token usage logs are retained

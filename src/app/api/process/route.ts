@@ -142,7 +142,7 @@ export async function POST(request: Request) {
                 extractedText,
                 confidenceFlag,
             },
-            { status: 200 },
+            { status: 200 },    
         );
     } catch (error) {
         console.error("Processing Route Error:", error);

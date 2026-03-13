@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { adminApi } from "@/lib/adminApi"; // Import the API client
 
 export default function AdminLogin() {
     const [email, setEmail] = useState("");
@@ -16,19 +17,10 @@ export default function AdminLogin() {
         setError("");
 
         try {
-            const res = await fetch("/api/admin/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
-            });
-
-            const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(data.error || "Invalid credentials");
-            }
-
+            // Use the centralized API client
+            await adminApi.login(email, password);
             router.push("/admin/dashboard");
+            router.refresh(); // Force layout update
         } catch (err: any) {
             setError(err.message || "Login failed. Please try again.");
         } finally {
