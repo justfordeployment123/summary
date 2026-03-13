@@ -105,7 +105,7 @@ export const adminApi = {
         if (!res.ok) throw new Error(data.error || "Failed to regenerate job");
         return data;
     },
-
+    
     async getCategories(): Promise<{ categories: Category[] }> {
         const res = await fetch("/api/admin/categories");
         const data = await res.json();
@@ -180,4 +180,24 @@ export const adminApi = {
         if (!res.ok) throw new Error(data.error || "Failed to delete upsell");
         return data;
     },
+
+
+    // --- SETTINGS ---
+
+    async getSettings(): Promise<{ settings: Record<string, any> }> {
+        const res = await fetch("/api/admin/settings");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to fetch settings");
+        return data;
+    },
+
+    async updateSetting(key: string, value: any): Promise<void> {
+        const res = await fetch("/api/admin/settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key, value }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to update setting");
+    }
 };

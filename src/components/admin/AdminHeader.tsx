@@ -3,11 +3,70 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+// ─── Page meta: icon + description per route ─────────────────────────────────
+const PAGE_META: Record<string, { icon: React.ReactNode; description: string }> = {
+    dashboard: {
+        description: "System overview and recent activity",
+        icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zm9.75-9.75A2.25 2.25 0 0115.75 3.75H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zm0 9.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"
+                />
+            </svg>
+        ),
+    },
+    pricing: {
+        description: "Manage categories and base prices",
+        icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"
+                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+            </svg>
+        ),
+    },
+    upsells: {
+        description: "Configure add-on services for checkout",
+        icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        ),
+    },
+    settings: {
+        description: "System configuration and limits",
+        icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"
+                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+        ),
+    },
+};
+
+const FALLBACK_META = {
+    description: "Admin panel",
+    icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
+        </svg>
+    ),
+};
+
 export function AdminHeader() {
     const pathname = usePathname();
     const [adminEmail, setAdminEmail] = useState<string | null>(null);
+    const [time, setTime] = useState(new Date());
 
-    // Fetch the logged-in admin's email for the top bar
     useEffect(() => {
         async function fetchMe() {
             try {
@@ -16,26 +75,77 @@ export function AdminHeader() {
                     const data = await res.json();
                     setAdminEmail(data.user.email);
                 }
-            } catch (err) {
-                console.error("Failed to fetch admin info");
-            }
+            } catch {}
         }
         fetchMe();
+
+        // Live clock — tick every minute
+        const tick = setInterval(() => setTime(new Date()), 60_000);
+        return () => clearInterval(tick);
     }, []);
 
-    // Extract a nice title from the URL path
-    const pathSegment = pathname.split("/").pop();
-    const title = pathSegment ? pathSegment.charAt(0).toUpperCase() + pathSegment.slice(1) : "Admin";
+    const segment = pathname.split("/").filter(Boolean).pop() ?? "dashboard";
+    const title = segment.charAt(0).toUpperCase() + segment.slice(1);
+    const meta = PAGE_META[segment] ?? FALLBACK_META;
+
+    const initials = adminEmail ? adminEmail.split("@")[0].slice(0, 2).toUpperCase() : "—";
+
+    const dateStr = time.toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+    });
+    const timeStr = time.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+    });
 
     return (
-        <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0">
-            <h1 className="text-sm font-semibold text-slate-700 capitalize">{title}</h1>
+        <header className="bg-white border-b border-slate-200/80 px-7 py-0 flex items-center justify-between shrink-0 h-15">
+            {/* ── Left: page identity ── */}
+            <div className="flex items-center gap-3">
+                {/* Icon badge */}
+                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">{meta.icon}</div>
 
-            <div className="flex items-center gap-4">
-                <span className="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">{adminEmail || "Loading..."}</span>
-                <span className="text-xs text-slate-400 hidden sm:block">
-                    {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                </span>
+                {/* Title + breadcrumb description */}
+                <div className="flex items-baseline gap-2.5">
+                    <h1 className="text-sm font-bold text-slate-900 tracking-tight">{title}</h1>
+                    <span className="hidden sm:block text-xs text-slate-400 font-medium">{meta.description}</span>
+                </div>
+            </div>
+
+            {/* ── Right: date/time + user chip ── */}
+            <div className="flex items-center gap-3">
+                {/* Date + time pill */}
+                <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-1.5">
+                    <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5"
+                        />
+                    </svg>
+                    <span className="text-xs font-semibold text-slate-600">{dateStr}</span>
+                    <span className="w-px h-3 bg-slate-200" />
+                    <span className="text-xs font-semibold text-slate-400 tabular-nums">{timeStr}</span>
+                </div>
+
+                {/* Divider */}
+                <span className="hidden md:block w-px h-5 bg-slate-200" />
+
+                {/* User chip */}
+                <div className="flex items-center gap-2.5 pl-0.5">
+                    {/* Avatar */}
+                    <div className="w-7 h-7 rounded-full bg-linear-to-br from-teal-400 to-teal-600 flex items-center justify-center shrink-0 shadow-sm">
+                        <span className="text-[10px] font-bold text-white tracking-wide">{initials}</span>
+                    </div>
+
+                    {/* Email truncated */}
+                    <span className="hidden sm:block text-xs font-semibold text-slate-600 max-w-40 truncate">{adminEmail ?? "Loading…"}</span>
+
+                    {/* Online dot */}
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 shrink-0" />
+                </div>
             </div>
         </header>
     );
