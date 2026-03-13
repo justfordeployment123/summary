@@ -25,17 +25,68 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 ```
 explain-my-letter/
 ├── src/
-│   └── app/
-│       ├── favicon.ico
-│       ├── globals.css
-│       ├── layout.tsx
-│       └── page.tsx
+│   ├── app/
+│   │   ├── admin/
+│   │   │   ├── dashboard/
+│   │   │   │   └── page.tsx
+│   │   │   ├── jobs/
+│   │   │   │   └── page.tsx
+│   │   │   ├── login/
+│   │   │   │   └── page.tsx
+│   │   │   ├── prompts/
+│   │   │   │   └── page.tsx
+│   │   │   ├── settings/
+│   │   │   │   └── page.tsx
+│   │   │   └── layout.tsx
+│   │   ├── api/
+│   │   │   ├── admin/
+│   │   │   │   └── dashboard/
+│   │   │   │       └── route.ts
+│   │   │   ├── checkout/
+│   │   │   │   └── route.ts
+│   │   │   ├── generate-free/
+│   │   │   │   └── route.ts
+│   │   │   ├── generate-paid/
+│   │   │   │   └── route.ts
+│   │   │   ├── process/
+│   │   │   │   └── route.ts
+│   │   │   ├── upload/
+│   │   │   │   └── route.ts
+│   │   │   └── webhooks/
+│   │   │       └── stripe/
+│   │   │           └── route.ts
+│   │   ├── (public)/
+│   │   │   └── page.tsx
+│   │   ├── public/
+│   │   │   └── success/
+│   │   │       └── page.tsx
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── lib/
+│   │   ├── api.ts
+│   │   └── db.ts
+│   ├── models/
+│   │   ├── AdminUser.ts
+│   │   ├── Category.ts
+│   │   ├── Job.ts
+│   │   ├── JobPayment.ts
+│   │   ├── JobStateLog.ts
+│   │   ├── Prompt.ts
+│   │   ├── Setting.ts
+│   │   └── WebhookEvent.ts
+│   ├── services/
+│   │   └── jobService.ts
+│   └── types/
+│       └── job.ts
 ├── public/
 │   ├── file.svg
 │   ├── globe.svg
 │   ├── next.svg
 │   ├── vercel.svg
 │   └── window.svg
+├── .env.local
 ├── .gitignore
 ├── eslint.config.mjs
 ├── next-env.d.ts
@@ -43,9 +94,313 @@ explain-my-letter/
 ├── package.json
 ├── package-lock.json
 ├── postcss.config.mjs
+├── test-aws.js
 ├── tsconfig.json
 └── README.md
 ```
+
+## API Schema
+
+### 1. Upload Initialization
+
+**Endpoint:** `POST /api/upload`
+
+**Request (UploadInitPayload):**
+
+```typescript
+{
+    fileName: string;
+    fileType: string;
+    category: string;
+    firstName: string;
+    email: string;
+    marketingConsent: boolean;
+}
+```
+
+**Response (UploadInitResponse):**
+
+```typescript
+{
+    presignedUrl: string;
+    s3Key: string;
+    jobId: string;
+    accessToken: string;
+}
+```
+
+**Description:** Initializes a new job and returns a presigned URL for uploading the file directly to S3.
+
+---
+
+### 2. OCR Processing
+
+**Endpoint:** `POST /api/process`
+
+**Request (OCRPayload):**
+
+```typescript
+{
+    jobId: string;
+    s3Key: string;
+    fileType: string;
+}
+```
+
+**Response (OCRResponse):**
+
+```typescript
+{
+    message: string;
+    extractedText: string;
+    confidenceFlag: boolean;
+}
+```
+
+**Description:** Triggers AWS Textract (for images) or PDF/DOCX parsers to extract text from the uploaded file. Returns extracted text and confidence metrics.
+
+---
+
+### 3. Free Summary Generation
+
+**Endpoint:** `POST /api/generate-free`
+
+**Request (GenerateFreePayload):**
+
+```typescript
+{
+    jobId: string;
+    extractedText: string;
+}
+```
+
+**Response (GenerateFreeResponse):**
+
+```typescript
+{
+    summary: string;
+    urgency: string;
+}
+```
+
+**Description:** Sends extracted text to OpenAI GPT-4 to generate a free summary (100-130 words) with urgency indicator.
+
+---
+
+### 4. Checkout Session Creation
+
+**Endpoint:** `POST /api/checkout`
+
+**Request (CheckoutPayload):**
+
+```typescript
+{
+  jobId: string;
+  upsells: string[];  // e.g., ["legal_formatting", "tone_rewrite"]
+}
+```
+
+**Response:**
+
+```typescript
+{
+    url: string;
+}
+```
+
+**Description:** Creates a Stripe Checkout Session for premium features. Returns the hosted checkout URL.
+
+---
+
+### 5. Paid Summary Generation
+
+**Endpoint:** `POST /api/generate-paid`
+
+**Request (GeneratePaidPayload):**
+
+```typescript
+{
+    jobId: string;
+    extractedText: string;
+}
+```
+
+**Response (GeneratePaidResponse):**
+
+```typescript
+{
+    detailedBreakdown: string;
+}
+```
+
+**Description:** After successful payment, generates a detailed breakdown using OpenAI GPT-4 with selected upsells applied.
+
+---
+
+### 6. Stripe Webhook
+
+**Endpoint:** `POST /api/webhooks/stripe`
+
+**Description:** Receives and verifies Stripe webhook events for payment confirmations. Triggers paid generation upon successful payment.
+
+---
+
+### 7. Admin Dashboard
+
+**Endpoint:** `GET /api/admin/dashboard`
+
+**Description:** Returns analytics and job statistics for the admin panel.
+
+---
+
+## Database Schema
+
+### Job
+
+Core collection storing job metadata and state.
+
+```typescript
+{
+  _id: ObjectId;
+  reference_id: string (unique);           // Public-facing job ID
+  access_token: string (unique);           // UUID for secure access
+  status: enum;                             // UPLOADED, OCR_PROCESSING, OCR_FAILED, FREE_SUMMARY_GENERATING, FREE_SUMMARY_COMPLETE, AWAITING_PAYMENT, PAYMENT_CONFIRMED, PAID_BREAKDOWN_GENERATING, COMPLETED
+  category_id: string;                      // Reference to category
+  user_email: string;                       // User's email
+  user_name: string;                        // User's name
+  marketing_consent: boolean;               // Marketing opt-in
+  disclaimer_acknowledged: boolean;         // Payment disclaimer checkbox
+  disclaimer_acknowledged_at: Date;         // When disclaimer was checked
+  urgency: enum;                            // "Routine", "Important", "Time-Sensitive"
+  previous_state: string;                   // Track state transitions
+  state_transitioned_at: Date;              // Last state change timestamp
+  createdAt: Date;                          // Auto-generated timestamp
+  updatedAt: Date;                          // Auto-generated timestamp
+}
+```
+
+---
+
+### JobPayment
+
+Stores payment and Stripe session details.
+
+```typescript
+{
+  _id: ObjectId;
+  job_id: ObjectId;                         // Reference to Job
+  stripe_session_id: string;                // Stripe Checkout Session ID
+  stripe_payment_intent_id: string;         // Stripe Payment Intent ID (optional)
+  amount: number;                           // Amount in pennies (e.g., 499 for £4.99)
+  currency: string;                         // Default: "gbp"
+  status: enum;                             // "pending", "completed", "failed"
+  upsells_purchased: [string];              // Array of upsell codes (e.g., ["legal_formatting"])
+  created_at: Date;                         // Timestamp
+}
+```
+
+---
+
+### AdminUser
+
+Admin credentials and roles.
+
+```typescript
+{
+  _id: ObjectId;
+  email: string (unique);                   // Admin email
+  password_hash: string;                    // Bcrypt hashed password
+  role: enum;                               // "superadmin", "editor", "support"
+  last_login: Date;                         // Last login timestamp
+  created_at: Date;                         // Account creation timestamp
+}
+```
+
+---
+
+### Category
+
+Document categories for classification.
+
+```typescript
+{
+    _id: ObjectId;
+    name: string; // Display name (e.g., "Legal Notice")
+    slug: string(unique); // URL-friendly name (e.g., "legal_notice")
+    base_price: number; // Base price in pennies
+    is_active: boolean; // Enable/disable category
+    created_at: Date; // Creation timestamp
+}
+```
+
+---
+
+### Prompt
+
+Dynamic prompt templates for AI generation.
+
+```typescript
+{
+  _id: ObjectId;
+  category_id: ObjectId;                    // Reference to Category (optional - null = generic)
+  type: enum;                               // "free", "paid", "upsell"
+  prompt_text: string;                      // Full prompt template
+  version: number;                          // Version number for tracking
+  is_active: boolean;                       // Active/inactive status
+  updated_at: Date;                         // Last update timestamp
+}
+```
+
+---
+
+### JobStateLog
+
+Audit trail of all state transitions.
+
+```typescript
+{
+    _id: ObjectId;
+    job_id: ObjectId; // Reference to Job
+    from_state: string; // Previous state
+    to_state: string; // New state
+    triggered_by: string; // What triggered the transition (e.g., "api", "webhook")
+    createdAt: Date; // Event timestamp
+}
+```
+
+---
+
+### Setting
+
+Configuration key-value store for app settings.
+
+```typescript
+{
+    _id: ObjectId;
+    key: string(unique); // Setting key (e.g., "max_upload_size")
+    value: any; // Setting value (string, number, or JSON)
+    description: string; // Description of the setting
+    updated_at: Date; // Last update timestamp
+}
+```
+
+---
+
+### WebhookEvent
+
+Stripe webhook event log for idempotency and audit.
+
+```typescript
+{
+    _id: ObjectId;
+    stripe_event_id: string(unique); // Stripe event ID
+    event_type: string; // Event type (e.g., "charge.succeeded")
+    job_id: ObjectId; // Reference to Job (optional)
+    processed_at: Date; // Processing timestamp
+}
+```
+
+---
 
 ## Learn More
 
@@ -81,10 +436,6 @@ Your backend enforces the 1,200-word limit and sends text to GPT-4 with the "Fre
 
 **Phase 6: The Result**
 OpenAI returns a 100-130 word summary and urgency indicator. Your backend saves to database, updates job state to `FREE_SUMMARY_COMPLETE`, and returns the result to the frontend.
-
-
-
-
 
 Mapping out the entire lifecycle from start to finish is the absolute best way to understand the system architecture. It removes all the guesswork.
 
@@ -168,7 +519,7 @@ User completes payment on the hosted Stripe Checkout page [cite: 15, 171]
 
 ### Phase 3: The Secure Webhook & Paid Generation
 
-This is the most protected part of the app. The client explicitly requires that paid AI generation *never* happens just because the user gets redirected to a "success" page. It must come from Stripe directly.
+This is the most protected part of the app. The client explicitly requires that paid AI generation _never_ happens just because the user gets redirected to a "success" page. It must come from Stripe directly.
 
 ```
 Stripe successfully processes payment and sends Webhook to `/api/webhooks/stripe` [cite: 83, 90]

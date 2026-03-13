@@ -1,157 +1,281 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreditCard, FileStack, CheckCircle, TrendingUp, AlertCircle } from "lucide-react";
 
-// Types matching your API response
-interface DashboardData {
-    metrics: {
-        totalRevenue: string;
-        totalJobs: number;
-        paidJobs: number;
-        failedJobs: number;
-        conversionRate: string;
-    };
-    recentJobs: Array<{
-        _id: string;
-        user_email: string;
-        category_name?: string;
-        status: string;
-        created_at: string;
-    }>;
+interface DashboardStats {
+    totalJobs: number;
+    completedToday: number;
+    pendingJobs: number;
+    failedJobs: number;
+    revenueToday: number;
+    revenueMonth: number;
+    tokenUsageMonth: number;
+    tokenCapMonth: number;
+    stuckJobs: StuckJob[];
+    recentJobs: RecentJob[];
+    capWarning: boolean;
 }
 
+interface StuckJob {
+    jobId: string;
+    referenceId: string;
+    status: string;
+    stuckFor: number; // minutes
+    email: string;
+}
+
+interface RecentJob {
+    jobId: string;
+    referenceId: string;
+    status: string;
+    category: string;
+    email: string;
+    urgency: string;
+    createdAt: string;
+    amount?: number;
+}
+
+const STATUS_BADGE: Record<string, string> = {
+    UPLOADED: "bg-slate-100 text-slate-600",
+    OCR_PROCESSING: "bg-blue-100 text-blue-700",
+    OCR_FAILED: "bg-red-100 text-red-700",
+    FREE_SUMMARY_GENERATING: "bg-yellow-100 text-yellow-700",
+    FREE_SUMMARY_COMPLETE: "bg-teal-100 text-teal-700",
+    AWAITING_PAYMENT: "bg-orange-100 text-orange-700",
+    PAYMENT_CONFIRMED: "bg-blue-100 text-blue-700",
+    PAID_BREAKDOWN_GENERATING: "bg-purple-100 text-purple-700",
+    COMPLETED: "bg-emerald-100 text-emerald-700",
+    FAILED: "bg-red-100 text-red-700",
+    REFUNDED: "bg-slate-100 text-slate-500",
+};
+
 export default function AdminDashboard() {
-    const [data, setData] = useState<DashboardData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState("");
 
     useEffect(() => {
-        async function fetchDashboard() {
-            try {
-                const res = await fetch('/api/admin/dashboard');
-                if (!res.ok) throw new Error("Failed to fetch dashboard data");
-                const json = await res.json();
-                setData(json);
-            } catch (err: any) {
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchDashboard();
+        fetchStats();
+        const interval = setInterval(fetchStats, 30000); // refresh every 30s
+        return () => clearInterval(interval);
     }, []);
 
-    if (loading) return <div className="flex h-full items-center justify-center text-lg font-medium text-gray-500 animate-pulse">Loading dashboard...</div>;
-    if (error) return <div className="text-red-500 font-bold bg-red-50 p-4 rounded-lg border border-red-200">{error}</div>;
-    if (!data) return null;
-
-    // Helper to colorize status badges
-    const getStatusBadge = (status: string) => {
-        const baseStyle = "px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full";
-        switch (status) {
-            case "COMPLETED":
-                return <span className={`${baseStyle} bg-green-100 text-green-800`}>Paid & Completed</span>;
-            case "PAYMENT_CONFIRMED":
-            case "PAID_BREAKDOWN_GENERATING":
-                return <span className={`${baseStyle} bg-blue-100 text-blue-800`}>Processing Paid</span>;
-            case "AWAITING_PAYMENT":
-                return <span className={`${baseStyle} bg-yellow-100 text-yellow-800`}>Awaiting Payment</span>;
-            case "OCR_FAILED":
-            case "FAILED":
-                return <span className={`${baseStyle} bg-red-100 text-red-800`}>Failed</span>;
-            default:
-                return <span className={`${baseStyle} bg-gray-100 text-gray-800`}>{status.replace(/_/g, ' ')}</span>;
+    async function fetchStats() {
+        try {
+            const res = await fetch("/api/admin/dashboard");
+            if (!res.ok) throw new Error("Failed to load dashboard");
+            const data = await res.json();
+            setStats(data);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
         }
-    };
+    }
+
+    async function regenerateJob(jobId: string) {
+        if (!confirm("Regenerate breakdown for this job?")) return;
+        try {
+            const res = await fetch(`/api/admin/jobs/${jobId}/regenerate`, { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            alert("Regeneration triggered successfully.");
+            fetchStats();
+        } catch (err: any) {
+            alert(`Failed: ${err.message}`);
+        }
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="w-8 h-8 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="p-6">
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">{error}</div>
+            </div>
+        );
+    }
+
+    if (!stats) return null;
+
+    const capPercent = stats.tokenCapMonth > 0 ? Math.round((stats.tokenUsageMonth / stats.tokenCapMonth) * 100) : 0;
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
-            
-            {/* Top Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard 
-                    title="Total Revenue" 
-                    value={data.metrics.totalRevenue} 
-                    icon={<CreditCard className="w-6 h-6 text-green-600" />} 
-                    bgColor="bg-green-50"
-                />
-                <MetricCard 
-                    title="Total Uploads" 
-                    value={data.metrics.totalJobs.toString()} 
-                    icon={<FileStack className="w-6 h-6 text-blue-600" />} 
-                    bgColor="bg-blue-50"
-                />
-                <MetricCard 
-                    title="Conversion Rate" 
-                    value={data.metrics.conversionRate} 
-                    icon={<TrendingUp className="w-6 h-6 text-indigo-600" />} 
-                    bgColor="bg-indigo-50"
-                />
-                <MetricCard 
-                    title="Failed Jobs" 
-                    value={data.metrics.failedJobs.toString()} 
-                    icon={<AlertCircle className="w-6 h-6 text-red-600" />} 
-                    bgColor="bg-red-50"
-                />
+        <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+                <button onClick={fetchStats} className="text-xs text-slate-500 hover:text-teal-600 flex items-center gap-1 transition-colors">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                    </svg>
+                    Refresh
+                </button>
             </div>
 
-            {/* Recent Jobs Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-6 py-5 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                    <h3 className="text-lg leading-6 font-bold text-gray-900">Recent Jobs</h3>
-                    <button className="text-sm text-blue-600 hover:text-blue-800 font-medium">View all</button>
+            {/* Cap warning banner */}
+            {stats.capWarning && (
+                <div className="bg-amber-50 border border-amber-300 rounded-xl px-5 py-4 flex items-start gap-3">
+                    <svg className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                    </svg>
+                    <div>
+                        <p className="font-semibold text-amber-800 text-sm">Monthly OpenAI usage cap approaching ({capPercent}%)</p>
+                        <p className="text-amber-700 text-xs mt-0.5">
+                            Paid AI generation will be automatically disabled at 100%. Adjust cap in Settings.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Stuck jobs alert */}
+            {stats.stuckJobs.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4">
+                    <p className="font-semibold text-red-800 text-sm mb-3">
+                        {stats.stuckJobs.length} job{stats.stuckJobs.length > 1 ? "s" : ""} stuck in processing
+                    </p>
+                    <div className="space-y-2">
+                        {stats.stuckJobs.map((j) => (
+                            <div key={j.jobId} className="flex items-center justify-between text-xs text-red-700 bg-red-100 rounded-lg px-3 py-2">
+                                <span className="font-mono">{j.referenceId}</span>
+                                <span>{j.status}</span>
+                                <span className="text-red-500">{j.stuckFor}m stuck</span>
+                                <span className="text-slate-600">{j.email}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Stats grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                    { label: "Total Jobs", value: stats.totalJobs, icon: "📄", color: "text-slate-700" },
+                    { label: "Completed Today", value: stats.completedToday, icon: "✅", color: "text-emerald-600" },
+                    { label: "Pending", value: stats.pendingJobs, icon: "⏳", color: "text-amber-600" },
+                    { label: "Failed", value: stats.failedJobs, icon: "❌", color: "text-red-600" },
+                ].map((s) => (
+                    <div key={s.label} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                        <div className="text-2xl mb-1">{s.icon}</div>
+                        <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">{s.label}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Revenue + Token usage */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Revenue */}
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                    <h3 className="text-sm font-bold text-slate-700 mb-4">Revenue</h3>
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs text-slate-500">Today</span>
+                            <span className="font-bold text-slate-800">£{(stats.revenueToday / 100).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs text-slate-500">This month</span>
+                            <span className="font-bold text-teal-600 text-lg">£{(stats.revenueMonth / 100).toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Token Usage */}
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                    <h3 className="text-sm font-bold text-slate-700 mb-4">Monthly OpenAI Usage</h3>
+                    <div className="space-y-3">
+                        <div className="flex justify-between text-xs text-slate-500 mb-1">
+                            <span>{stats.tokenUsageMonth.toLocaleString()} tokens used</span>
+                            <span className={capPercent >= 80 ? "text-amber-600 font-bold" : ""}>{capPercent}%</span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                                className={`h-full rounded-full transition-all ${capPercent >= 100 ? "bg-red-500" : capPercent >= 80 ? "bg-amber-500" : "bg-teal-500"}`}
+                                style={{ width: `${Math.min(capPercent, 100)}%` }}
+                            />
+                        </div>
+                        <div className="text-xs text-slate-400">Cap: {stats.tokenCapMonth.toLocaleString()} tokens</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Recent jobs */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-700">Recent Jobs</h3>
+                    <a href="/admin/jobs" className="text-xs text-teal-600 hover:text-teal-700 font-semibold">
+                        View all →
+                    </a>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-white">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Email</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Category</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                    <table className="w-full text-xs">
+                        <thead>
+                            <tr className="border-b border-slate-100 bg-slate-50">
+                                {["Reference", "Category", "Email", "Status", "Urgency", "Amount", "Created", "Actions"].map((h) => (
+                                    <th key={h} className="text-left px-4 py-3 font-semibold text-slate-500">
+                                        {h}
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {data.recentJobs.map((job) => (
-                                <tr key={job._id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {job.user_email || "Anonymous"}
+                        <tbody>
+                            {stats.recentJobs.map((job) => (
+                                <tr key={job.jobId} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                                    <td className="px-4 py-3 font-mono text-slate-600">{job.referenceId}</td>
+                                    <td className="px-4 py-3 text-slate-600">{job.category}</td>
+                                    <td className="px-4 py-3 text-slate-500">{job.email}</td>
+                                    <td className="px-4 py-3">
+                                        <span
+                                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[job.status] ?? "bg-slate-100 text-slate-500"}`}
+                                        >
+                                            {job.status.replace(/_/g, " ")}
+                                        </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {job.category_name || "Unknown"}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        {getStatusBadge(job.status)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {new Date(job.created_at).toLocaleDateString()} {new Date(job.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    <td className="px-4 py-3 text-slate-500">{job.urgency || "—"}</td>
+                                    <td className="px-4 py-3 text-slate-600">{job.amount ? `£${(job.amount / 100).toFixed(2)}` : "—"}</td>
+                                    <td className="px-4 py-3 text-slate-400">{new Date(job.createdAt).toLocaleDateString("en-GB")}</td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex gap-2">
+                                            <a href={`/admin/jobs?id=${job.jobId}`} className="text-teal-600 hover:text-teal-700 font-semibold">
+                                                View
+                                            </a>
+                                            {job.status === "FAILED" && (
+                                                <button
+                                                    onClick={() => regenerateJob(job.jobId)}
+                                                    className="text-amber-600 hover:text-amber-700 font-semibold"
+                                                >
+                                                    Regenerate
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
-                            {data.recentJobs.length === 0 && (
+                            {stats.recentJobs.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">No jobs found yet.</td>
+                                    <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                                        No jobs yet
+                                    </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
-            </div>
-        </div>
-    );
-}
-
-// Reusable UI Component for Metric Cards
-function MetricCard({ title, value, icon, bgColor }: { title: string, value: string, icon: React.ReactNode, bgColor: string }) {
-    return (
-        <div className="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-200 p-6 flex items-center">
-            <div className={`p-4 rounded-lg ${bgColor} mr-5`}>
-                {icon}
-            </div>
-            <div>
-                <dt className="text-sm font-medium text-gray-500 truncate mb-1">{title}</dt>
-                <dd className="text-2xl font-extrabold text-gray-900">{value}</dd>
             </div>
         </div>
     );
