@@ -5,10 +5,10 @@ import pdfParse from "pdf-parse-new";
 import mammoth from "mammoth";
 import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
+import Temp from "@/models/Temp"; // <-- IMPORT TEMP MODEL
 import { JobState } from "@/types/job";
 import { JobStateLog } from "@/models/JobStateLog";
 
-// Initialize AWS Clients (Both will seamlessly use eu-west-2 from your .env)
 const s3Client = new S3Client({
     region: process.env.AWS_REGION!,
     credentials: {
@@ -37,22 +37,17 @@ export async function POST(request: Request) {
         const job = await Job.findById(jobId);
         if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-        // Advance State to OCR_PROCESSING
         job.previous_state = job.status;
         job.status = JobState.OCR_PROCESSING;
         job.state_transitioned_at = new Date();
         await job.save();
 
-
-        // console.log(s3Client);
-        // console.log(textractClient);
         console.log("Starting OCR Processing for Job ID:", jobId);
         let extractedText = "";
         let confidenceFlag = false;
 
         try {
             if (fileType === "image/jpeg" || fileType === "image/png") {
-                // Highly Optimized: Textract reads directly from S3 (Zero server memory used!)
                 const command = new DetectDocumentTextCommand({
                     Document: {
                         S3Object: { Bucket: process.env.AWS_S3_BUCKET_NAME!, Name: s3Key },
@@ -60,7 +55,6 @@ export async function POST(request: Request) {
                 });
 
                 const response = await textractClient.send(command);
-                // console.log("Textract Response:", response.Blocks);
                 let totalConfidence = 0;
                 let wordCount = 0;
 
@@ -82,7 +76,6 @@ export async function POST(request: Request) {
                     confidenceFlag = true;
                 }
             } else {
-                // PDF and DOCX parsers (Requires bringing the buffer into memory)
                 const getObjCmd = new GetObjectCommand({
                     Bucket: process.env.AWS_S3_BUCKET_NAME!,
                     Key: s3Key,
@@ -109,7 +102,6 @@ export async function POST(request: Request) {
             job.status = JobState.OCR_FAILED;
             await job.save();
 
-            // Delete the unreadable file
             await s3Client.send(
                 new DeleteObjectCommand({
                     Bucket: process.env.AWS_S3_BUCKET_NAME!,
@@ -125,13 +117,19 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "EXTRACTION_FAILED", message: errorMsg }, { status: 422 });
         }
 
-        // Enforce Hard 1,200 Word Limit BEFORE AI Processing
         const textWords = extractedText.trim().split(/\s+/);
         if (textWords.length > 1200) {
             extractedText = textWords.slice(0, 1200).join(" ");
         }
 
-        // Advance State to FREE_SUMMARY_GENERATING
+        // 👇 NEW: TEMPORARILY SAVE TEXT TO TEMP COLLECTION 👇
+        await Temp.findOneAndUpdate(
+            { job_id: jobId },
+            { extracted_text: extractedText },
+            { upsert: true, new: true }
+        );
+        // 👆 --------------------------------------------- 👆
+
         job.previous_state = job.status;
         job.status = JobState.FREE_SUMMARY_GENERATING;
         await job.save();

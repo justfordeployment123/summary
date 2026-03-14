@@ -8,14 +8,13 @@ import { JobStateLog } from "@/models/JobStateLog";
 import { JobState } from "@/types/job";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2026-02-25.clover",
+    apiVersion: "2026-02-25.clover" as any,
 });
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 export async function POST(request: Request) {
     try {
-        // 1. Get the raw text body and the Stripe signature header
         const body = await request.text();
         const signature = request.headers.get("stripe-signature");
 
@@ -25,7 +24,6 @@ export async function POST(request: Request) {
 
         let event: Stripe.Event;
 
-        // 2. Cryptographically verify that this request actually came from Stripe
         try {
             event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
         } catch (err: any) {
@@ -35,14 +33,19 @@ export async function POST(request: Request) {
 
         await dbConnect();
 
-        // 3. Idempotency Check: Have we processed this exact event already?
+        // 1. Idempotency Check
         const existingEvent = await WebhookEvent.findOne({ stripe_event_id: event.id });
         if (existingEvent) {
-            console.log(`Event ${event.id} already processed. Skipping.`);
             return NextResponse.json({ received: true }, { status: 200 });
         }
 
-        // We only care about successful checkout sessions right now
+        // 2. Lock the event immediately to prevent duplicate processing on Stripe retries
+        await WebhookEvent.create({
+            stripe_event_id: event.id,
+            event_type: event.type,
+            job_id: event.type === "checkout.session.completed" ? (event.data.object as Stripe.Checkout.Session).metadata?.jobId : undefined,
+        });
+
         if (event.type === "checkout.session.completed") {
             const session = event.data.object as Stripe.Checkout.Session;
             const jobId = session.metadata?.jobId;
@@ -50,14 +53,14 @@ export async function POST(request: Request) {
             if (jobId) {
                 const job = await Job.findById(jobId);
 
-                if (job) {
-                    // A. Update the Job State
+                if (job && job.status === JobState.AWAITING_PAYMENT) {
+                    // Update Job State
                     job.previous_state = job.status;
                     job.status = JobState.PAYMENT_CONFIRMED;
                     job.state_transitioned_at = new Date();
                     await job.save();
 
-                    // B. Log the state change
+                    // Log the state change
                     await JobStateLog.create({
                         job_id: job._id,
                         from_state: JobState.AWAITING_PAYMENT,
@@ -65,7 +68,7 @@ export async function POST(request: Request) {
                         triggered_by: "stripe_webhook",
                     });
 
-                    // C. Update the JobPayment record to completed
+                    // Update the JobPayment record to 'completed'
                     await JobPayment.findOneAndUpdate(
                         { stripe_session_id: session.id },
                         {
@@ -74,21 +77,24 @@ export async function POST(request: Request) {
                         },
                     );
 
-                    console.log(`Payment confirmed for Job: ${jobId}`);
+                    console.log(`Payment confirmed for Job: ${jobId}. Triggering AI...`);
 
-                    // NOTE: This is where we will trigger the final OpenAI Detailed Breakdown generation!
+                    // 3. THE CRITICAL FIX: We MUST await this fetch!
+                    // This forces Next.js to keep the route alive until OpenAI finishes generating the markdown.
+                    try {
+                        await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/generate-paid`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ jobId: job._id }),
+                        });
+                        console.log("AI Generation completed successfully.");
+                    } catch (err) {
+                        console.error("Failed to trigger AI generation from webhook:", err);
+                    }
                 }
             }
         }
 
-        // 4. Record the event so we never process it twice
-        await WebhookEvent.create({
-            stripe_event_id: event.id,
-            event_type: event.type,
-            job_id: event.type === "checkout.session.completed" ? (event.data.object as Stripe.Checkout.Session).metadata?.jobId : undefined,
-        });
-
-        // Always return a 200 quickly so Stripe knows we got it
         return NextResponse.json({ received: true }, { status: 200 });
     } catch (error: any) {
         console.error("Webhook processing error:", error);

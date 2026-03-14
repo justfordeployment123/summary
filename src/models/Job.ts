@@ -62,6 +62,7 @@ const JobSchema = new mongoose.Schema(
         deleted_at: {
             type: Date,
         },
+        paid_summary: { type: String, default: null },
     },
     {
         // Force Mongoose to use snake_case for timestamps so it matches your DB queries

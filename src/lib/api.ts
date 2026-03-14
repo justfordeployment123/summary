@@ -158,3 +158,35 @@ export async function generatePaidSummary(data: GeneratePaidPayload): Promise<Ge
 
     return res.json();
 }
+
+
+// --- ADD THIS TO THE BOTTOM OF api.ts ---
+
+export interface JobStatusPayload {
+    jobId: string;
+    accessToken: string;
+}
+
+export interface JobStatusResponse {
+    status: string;
+    detailedBreakdown?: string;
+    urgency?: string;
+    referenceId?: string;
+    error?: string;
+}
+
+/**
+ * Step 7: Polls the backend to see if the Stripe webhook has triggered 
+ * the AI and finished generating the paid breakdown.
+ */
+export async function checkJobStatus({ jobId, accessToken }: JobStatusPayload): Promise<JobStatusResponse> {
+    // Note: We pass the token in the URL query string to satisfy the URL Enumeration Guard
+    const res = await fetch(`/api/jobs/${jobId}/status?token=${accessToken}`);
+    
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Unable to retrieve your results.");
+    }
+
+    return res.json();
+}

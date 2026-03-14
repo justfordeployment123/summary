@@ -32,6 +32,7 @@ interface SummaryData {
     summary: string;
     urgency: UrgencyLevel;
     jobId: string;
+    accessToken: string; // <-- ADDED: Token stored safely in state
 }
 
 interface CategoryOption {
@@ -146,10 +147,11 @@ export default function Home() {
 
         try {
             setUploadStatus(PROCESS_STEPS[0]);
-            const { presignedUrl, s3Key, jobId } = await requestUploadUrl({
+            // ADDED: Destructure the accessToken from the API response
+            const { presignedUrl, s3Key, jobId, accessToken } = await requestUploadUrl({
                 fileName: file.name,
                 fileType: file.type,
-                category: categoryId, // Pass the database ID, not the string name
+                category: categoryId,
                 firstName: firstName.trim(),
                 email: email.trim(),
                 marketingConsent,
@@ -173,7 +175,14 @@ export default function Home() {
 
             setCurrentStep(4);
             setUploadStatus(PROCESS_STEPS[4]);
-            setSummaryData({ summary: aiResult.summary, urgency: aiResult.urgency as UrgencyLevel, jobId });
+
+            // ADDED: Save the token in state so it survives for the checkout flow
+            setSummaryData({
+                summary: aiResult.summary,
+                urgency: aiResult.urgency as UrgencyLevel,
+                jobId,
+                accessToken,
+            });
             setView("summary");
         } catch (error: any) {
             setIsError(true);
@@ -201,6 +210,7 @@ export default function Home() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     jobId: summaryData.jobId,
+                    accessToken: summaryData.accessToken, // <-- ADDED: Send token to Stripe!
                     upsells: [],
                     disclaimerAcknowledged: true,
                 }),
@@ -571,3 +581,4 @@ export default function Home() {
         </div>
     );
 }
+    
