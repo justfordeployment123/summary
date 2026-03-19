@@ -97,14 +97,14 @@ export const adminApi = {
         return data;
     },
 
-    async regenerateJob(jobId: string): Promise<{ message: string }> {
-        const res = await fetch(`/api/admin/jobs/${jobId}/regenerate`, {
-            method: "POST",
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to regenerate job");
-        return data;
-    },
+    // async regenerateJob(jobId: string): Promise<{ message: string }> {
+    //     const res = await fetch(`/api/admin/jobs/${jobId}/regenerate`, {
+    //         method: "POST",
+    //     });
+    //     const data = await res.json();
+    //     if (!res.ok) throw new Error(data.error || "Failed to regenerate job");
+    //     return data;
+    // },
     
     async getCategories(): Promise<{ categories: Category[] }> {
         const res = await fetch("/api/admin/categories");
@@ -199,5 +199,32 @@ export const adminApi = {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to update setting");
+    },
+
+    /// --- JOB DETAILS & ACTIONS ---
+    async getJobs(params: URLSearchParams): Promise<any> {
+        const res = await fetch(`/api/admin/jobs?${params.toString()}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to fetch jobs");
+        return data;
+    },
+
+    async getJobDetail(jobId: string): Promise<any> {
+        const res = await fetch(`/api/admin/jobs/${jobId}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to fetch job detail");
+        return data;
+    },
+
+    async regenerateJob(jobId: string): Promise<void> {
+        const res = await fetch(`/api/admin/jobs/${jobId}/regenerate`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to regenerate job");
+    },
+
+    async refundJob(jobId: string): Promise<void> {
+        const res = await fetch(`/api/admin/jobs/${jobId}/refund`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to issue refund");
     }
 };

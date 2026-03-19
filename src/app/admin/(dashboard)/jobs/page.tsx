@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { adminApi } from "@/lib/adminApi"; // <-- IMPORT ADDED HERE
 
 interface Job {
     jobId: string;
@@ -103,9 +104,8 @@ export default function AdminJobsPage() {
             if (dateTo) params.set("to", dateTo);
             if (searchEmail) params.set("email", searchEmail);
 
-            const res = await fetch(`/api/admin/jobs?${params.toString()}`);
-            if (!res.ok) throw new Error("Failed to load jobs");
-            const data = await res.json();
+            // 1. LINKED: Use adminApi to fetch jobs
+            const data = await adminApi.getJobs(params);
             setJobs(data.jobs);
         } catch (err: any) {
             setError(err.message);
@@ -125,9 +125,8 @@ export default function AdminJobsPage() {
     async function loadJobDetail(jobId: string) {
         setIsLoadingDetail(true);
         try {
-            const res = await fetch(`/api/admin/jobs/${jobId}`);
-            if (!res.ok) throw new Error("Failed to load job detail");
-            const data = await res.json();
+            // 2. LINKED: Use adminApi to fetch job details
+            const data = await adminApi.getJobDetail(jobId);
             setSelectedJob(data);
         } catch (err: any) {
             alert(`Error: ${err.message}`);
@@ -139,9 +138,8 @@ export default function AdminJobsPage() {
     async function regenerateJob(jobId: string) {
         if (!confirm("Trigger regeneration for this failed job? This will use OpenAI tokens.")) return;
         try {
-            const res = await fetch(`/api/admin/jobs/${jobId}/regenerate`, { method: "POST" });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            // 3. LINKED: Use adminApi to regenerate
+            await adminApi.regenerateJob(jobId);
             alert("Regeneration triggered.");
             fetchJobs();
             if (selectedJob?.jobId === jobId) loadJobDetail(jobId);
@@ -153,9 +151,8 @@ export default function AdminJobsPage() {
     async function refundJob(jobId: string) {
         if (!confirm("Issue a full refund for this job via Stripe? This cannot be undone.")) return;
         try {
-            const res = await fetch(`/api/admin/jobs/${jobId}/refund`, { method: "POST" });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            // 4. LINKED: Use adminApi to refund
+            await adminApi.refundJob(jobId);
             alert("Refund issued. Job marked as REFUNDED.");
             fetchJobs();
             if (selectedJob?.jobId === jobId) loadJobDetail(jobId);
@@ -289,7 +286,10 @@ export default function AdminJobsPage() {
                             {[
                                 [
                                     "Status",
-                                    <span className={`px-2 py-0.5 rounded-full font-semibold ${STATUS_BADGE[selectedJob.status] ?? ""}`}>
+                                    <span
+                                        key="status-badge"
+                                        className={`px-2 py-0.5 rounded-full font-semibold ${STATUS_BADGE[selectedJob.status] ?? ""}`}
+                                    >
                                         {selectedJob.status.replace(/_/g, " ")}
                                     </span>,
                                 ],
