@@ -1,4 +1,5 @@
 // src/lib/api.ts
+// ─── Upload ──────────────────────────────────────────────────────────────────
 
 export interface UploadInitPayload {
     fileName: string;
@@ -34,15 +35,15 @@ export async function requestUploadUrl(data: UploadInitPayload): Promise<UploadI
     return res.json();
 }
 
+// ─── S3 Upload ───────────────────────────────────────────────────────────────
+
 /**
  * Step 2: Pushes the physical file directly to AWS S3 using the presigned URL.
  */
 export async function uploadFileToS3(presignedUrl: string, file: File): Promise<void> {
     const res = await fetch(presignedUrl, {
         method: "PUT",
-        headers: {
-            "Content-Type": file.type,
-        },
+        headers: { "Content-Type": file.type },
         body: file,
     });
 
@@ -51,7 +52,8 @@ export async function uploadFileToS3(presignedUrl: string, file: File): Promise<
     }
 }
 
-// Add these interfaces at the top with your others
+// ─── OCR ─────────────────────────────────────────────────────────────────────
+
 export interface OCRPayload {
     jobId: string;
     s3Key: string;
@@ -64,7 +66,6 @@ export interface OCRResponse {
     confidenceFlag: boolean;
 }
 
-// Add this function at the bottom of the file
 /**
  * Step 3: Tells the backend to read the file sitting in S3 using AWS Textract or Parsers.
  */
@@ -77,12 +78,13 @@ export async function triggerOCR(data: OCRPayload): Promise<OCRResponse> {
 
     if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        // If Textract fails (e.g., < 70% confidence), this throws the error to the UI
         throw new Error(errorData.message || "Failed to read the document. Please ensure it is clear and legible.");
     }
 
     return res.json();
 }
+
+// ─── Free Summary ─────────────────────────────────────────────────────────────
 
 export interface GenerateFreePayload {
     jobId: string;
@@ -96,6 +98,8 @@ export interface GenerateFreeResponse {
 
 /**
  * Step 4: Sends the extracted text to OpenAI for the free summary.
+ * Server enforces a 100–130 word limit on the response and a 1,200-word
+ * hard cap on the input text before forwarding to OpenAI.
  */
 export async function generateFreeSummary(data: GenerateFreePayload): Promise<GenerateFreeResponse> {
     const res = await fetch("/api/generate-free", {
@@ -112,60 +116,43 @@ export async function generateFreeSummary(data: GenerateFreePayload): Promise<Ge
     return res.json();
 }
 
+// ─── Checkout ─────────────────────────────────────────────────────────────────
 
 export interface CheckoutPayload {
     jobId: string;
-    upsells: string[]; // e.g., ["legal_formatting", "tone_rewrite"]
+    accessToken: string;
+    upsells: string[]; // array of upsell _id strings
+    disclaimerAcknowledged: boolean;
+    successUrl: string; // same-page return URL with flags
+    cancelUrl: string;
+}
+
+export interface CheckoutResponse {
+    url: string;
 }
 
 /**
- * Step 5: Ask backend to create a Stripe Checkout Session
+ * Step 5: Ask backend to create a Stripe Checkout Session.
+ * The server validates disclaimerAcknowledged before creating the session.
+ * successUrl & cancelUrl are passed from the client so Stripe returns to
+ * the correct page/state (the single-page flow).
  */
-export async function createCheckoutSession(data: CheckoutPayload): Promise<{ url: string }> {
-    const res = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-    });
-
-    if (!res.ok) throw new Error("Failed to initialize checkout.");
-    return res.json();
-}
-
-export interface GeneratePaidPayload {
-    jobId: string;
-    extractedText: string;
-}
-
-export interface GeneratePaidResponse {
-    detailedBreakdown: string;
-}
-
-/**
- * Step 6: Generates the final, detailed breakdown after payment.
- */
-export async function generatePaidSummary(data: GeneratePaidPayload): Promise<GeneratePaidResponse> {
-    const res = await fetch('/api/generate-paid', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+export async function createCheckoutSession(data: CheckoutPayload): Promise<CheckoutResponse> {
+    const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
     });
 
     if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to generate detailed breakdown.");
+        throw new Error(errorData.error || "Failed to initialize checkout.");
     }
 
     return res.json();
 }
 
-
-// --- ADD THIS TO THE BOTTOM OF api.ts ---
-
-export interface JobStatusPayload {
-    jobId: string;
-    accessToken: string;
-}
+// ─── Job Status (polling) ─────────────────────────────────────────────────────
 
 export interface JobStatusResponse {
     status: string;
@@ -176,17 +163,57 @@ export interface JobStatusResponse {
 }
 
 /**
- * Step 7: Polls the backend to see if the Stripe webhook has triggered 
- * the AI and finished generating the paid breakdown.
+ * Step 6: Poll job status after returning from Stripe.
+ * The token is passed in the query string (URL Enumeration Guard requirement).
+ * Called repeatedly on the same page until status === "COMPLETED" or "FAILED".
  */
-export async function checkJobStatus({ jobId, accessToken }: JobStatusPayload): Promise<JobStatusResponse> {
-    // Note: We pass the token in the URL query string to satisfy the URL Enumeration Guard
+export async function checkJobStatus(jobId: string, accessToken: string): Promise<JobStatusResponse> {
     const res = await fetch(`/api/jobs/${jobId}/status?token=${accessToken}`);
-    
+
     if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || "Unable to retrieve your results.");
     }
 
     return res.json();
+}
+
+// ─── Upsells ─────────────────────────────────────────────────────────────────
+
+export interface UpsellOption {
+    _id: string;
+    name: string;
+    description: string;
+    is_active: boolean;
+    category_prices: Record<string, number>; // categoryId → price in pence
+}
+
+export interface UpsellsResponse {
+    upsells: UpsellOption[];
+}
+
+/**
+ * Fetches active upsell options to display on the payment card.
+ */
+export async function fetchUpsells(): Promise<UpsellsResponse> {
+    const res = await fetch("/api/upsells");
+
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to load upsells.");
+    }
+
+    return res.json();
+}
+
+// ─── Download ─────────────────────────────────────────────────────────────────
+
+/**
+ * Opens a download link in a new tab.
+ * The server validates: job token is valid AND job.status === COMPLETED
+ * AND payment_status === confirmed before serving the file.
+ * Download links expire 72 hours after job completion (server-enforced).
+ */
+export function openDownload(jobId: string, accessToken: string, format: "pdf" | "docx" | "txt"): void {
+    window.open(`/api/download/${format}?job_id=${jobId}&token=${accessToken}`, "_blank");
 }

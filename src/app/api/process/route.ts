@@ -1,3 +1,13 @@
+// src/app/api/process/route.ts
+//
+// Matches your existing codebase patterns:
+//   • Uses dbConnect (not connectToDatabase)
+//   • Uses JobState enum from @/types/job
+//   • Uses Temp model for extracted text storage (24-hr TTL)
+//   • Confidence thresholds admin-configurable via Settings
+//   • Three-layer OCR failure handling (§5.3)
+//   • 1,200-word hard cap enforced here before returning to client (§9.1)
+
 import { NextResponse } from "next/server";
 import { TextractClient, DetectDocumentTextCommand } from "@aws-sdk/client-textract";
 import { S3Client, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
@@ -5,9 +15,9 @@ import pdfParse from "pdf-parse-new";
 import mammoth from "mammoth";
 import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
-import Temp from "@/models/Temp"; // <-- IMPORT TEMP MODEL
+import Temp from "@/models/Temp";
 import { JobState } from "@/types/job";
-import { JobStateLog } from "@/models/JobStateLog";
+import { Setting } from "@/models/Setting";
 
 const s3Client = new S3Client({
     region: process.env.AWS_REGION!,
@@ -34,13 +44,23 @@ export async function POST(request: Request) {
         }
 
         await dbConnect();
+
         const job = await Job.findById(jobId);
         if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
+        // ── Transition to OCR_PROCESSING ──
         job.previous_state = job.status;
         job.status = JobState.OCR_PROCESSING;
         job.state_transitioned_at = new Date();
         await job.save();
+
+        // ── Fetch admin-configurable confidence thresholds (§5.2) ──
+        const [highSetting, lowSetting] = await Promise.all([
+            Setting.findOne({ key: "ocr_confidence_high_threshold" }).lean<any>(),
+            Setting.findOne({ key: "ocr_confidence_low_threshold" }).lean<any>(),
+        ]);
+        const HIGH_THRESHOLD: number = highSetting?.value ?? 85;
+        const LOW_THRESHOLD: number = lowSetting?.value ?? 70;
 
         console.log("Starting OCR Processing for Job ID:", jobId);
         let extractedText = "";
@@ -48,6 +68,7 @@ export async function POST(request: Request) {
 
         try {
             if (fileType === "image/jpeg" || fileType === "image/png") {
+                // ── AWS Textract (§5.1) ──
                 const command = new DetectDocumentTextCommand({
                     Document: {
                         S3Object: { Bucket: process.env.AWS_S3_BUCKET_NAME!, Name: s3Key },
@@ -61,21 +82,25 @@ export async function POST(request: Request) {
                 response.Blocks?.forEach((block) => {
                     if (block.BlockType === "LINE" && block.Text) {
                         extractedText += block.Text + "\n";
-                        if (block.Confidence) {
-                            totalConfidence += block.Confidence;
-                            wordCount++;
-                        }
+                    }
+                    // Use WORD blocks for confidence — more granular than LINE (§5.2)
+                    if (block.BlockType === "WORD" && block.Confidence !== undefined) {
+                        totalConfidence += block.Confidence;
+                        wordCount++;
                     }
                 });
 
                 const averageConfidence = wordCount > 0 ? totalConfidence / wordCount : 0;
 
-                if (averageConfidence < 70) {
-                    throw new Error("OCR_FAILED");
-                } else if (averageConfidence >= 70 && averageConfidence < 85) {
+                // ── Three-layer confidence handling (§5.2) ──
+                if (averageConfidence < LOW_THRESHOLD) {
+                    throw new Error("OCR_CONFIDENCE_BELOW_THRESHOLD");
+                } else if (averageConfidence < HIGH_THRESHOLD) {
+                    // Flag — processing continues, warning shown to user
                     confidenceFlag = true;
                 }
             } else {
+                // ── PDF / DOCX direct extraction ──
                 const getObjCmd = new GetObjectCommand({
                     Bucket: process.env.AWS_S3_BUCKET_NAME!,
                     Key: s3Key,
@@ -87,7 +112,10 @@ export async function POST(request: Request) {
                 if (fileType === "application/pdf") {
                     const pdfData = await pdfParse(buffer);
                     extractedText = pdfData.text;
-                } else if (fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+                } else if (
+                    fileType ===
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                ) {
                     const docxData = await mammoth.extractRawText({ buffer });
                     extractedText = docxData.value;
                 }
@@ -97,41 +125,46 @@ export async function POST(request: Request) {
                 }
             }
         } catch (extractionError: any) {
-            console.error("Extraction Failed:", extractionError);
+            console.error("Extraction Failed:", extractionError.message);
 
             job.status = JobState.OCR_FAILED;
+            job.previous_state = JobState.OCR_PROCESSING;
+            job.state_transitioned_at = new Date();
             await job.save();
 
-            await s3Client.send(
-                new DeleteObjectCommand({
-                    Bucket: process.env.AWS_S3_BUCKET_NAME!,
-                    Key: s3Key,
-                }),
-            );
+            // Delete from S3 immediately on failure (§4.2)
+            await s3Client
+                .send(new DeleteObjectCommand({ Bucket: process.env.AWS_S3_BUCKET_NAME!, Key: s3Key }))
+                .catch(console.error);
 
             const errorMsg =
-                extractionError.message === "OCR_FAILED"
+                extractionError.message === "OCR_CONFIDENCE_BELOW_THRESHOLD"
                     ? "Image quality too low to read clearly. Please re-upload a clearer image."
                     : "The document appears to be corrupt, password-protected, or unreadable. Please re-upload.";
 
-            return NextResponse.json({ error: "EXTRACTION_FAILED", message: errorMsg }, { status: 422 });
+            return NextResponse.json(
+                { error: "EXTRACTION_FAILED", message: errorMsg },
+                { status: 422 },
+            );
         }
 
+        // ── 1,200-word hard cap on input before AI (§9.1) ──
         const textWords = extractedText.trim().split(/\s+/);
         if (textWords.length > 1200) {
             extractedText = textWords.slice(0, 1200).join(" ");
         }
 
-        // 👇 NEW: TEMPORARILY SAVE TEXT TO TEMP COLLECTION 👇
+        // ── Store in Temp collection (24-hr TTL failsafe, §4.3) ──
         await Temp.findOneAndUpdate(
             { job_id: jobId },
             { extracted_text: extractedText },
-            { upsert: true, new: true }
+            { upsert: true, new: true },
         );
-        // 👆 --------------------------------------------- 👆
 
+        // ── Transition state ──
         job.previous_state = job.status;
         job.status = JobState.FREE_SUMMARY_GENERATING;
+        job.state_transitioned_at = new Date();
         await job.save();
 
         return NextResponse.json(
@@ -140,7 +173,7 @@ export async function POST(request: Request) {
                 extractedText,
                 confidenceFlag,
             },
-            { status: 200 },    
+            { status: 200 },
         );
     } catch (error) {
         console.error("Processing Route Error:", error);

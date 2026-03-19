@@ -1,103 +1,159 @@
+// src/app/api/webhook/route.ts
+//
+// CRITICAL SECURITY REQUIREMENTS (§7):
+//   • Stripe webhook signature verification on EVERY request
+//   • Idempotency: duplicate events return HTTP 200 without reprocessing
+//   • Payment lock: paid AI triggered ONLY from verified webhook (never client redirect)
+//   • Job must be in AWAITING_PAYMENT state to advance to PAYMENT_CONFIRMED
+//   • Atomic state update within a single DB operation
+//   • Invalid signature → HTTP 400 + logged
+//
+// Extracted text is read from the Temp collection (24-hr TTL), not from the Job doc.
+
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
-import { JobPayment } from "@/models/JobPayment";
-import { WebhookEvent } from "@/models/WebhookEvent";
-import { JobStateLog } from "@/models/JobStateLog";
 import { JobState } from "@/types/job";
+import WebhookEvent from "@/models/WebhookEvent";
+import Temp from "@/models/Temp";
+import { generatePaidBreakdown } from "@/app/api/generate-paid/route";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2026-02-25.clover" as any,
-});
-
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
-export async function POST(request: Request) {
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
+export async function POST(req: Request) {
+    // ── 1. Verify Stripe signature (§7.1, §19) ──
+    const rawBody = await req.text();
+    const sig = req.headers.get("stripe-signature");
+
+    if (!sig) {
+        console.error("[webhook] Missing stripe-signature header");
+        return NextResponse.json({ error: "Missing signature." }, { status: 400 });
+    }
+
+    let event: Stripe.Event;
     try {
-        const body = await request.text();
-        const signature = request.headers.get("stripe-signature");
+        event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+    } catch (err: any) {
+        console.error("[webhook] Invalid signature:", err.message);
+        return NextResponse.json({ error: `Webhook signature verification failed: ${err.message}` }, { status: 400 });
+    }
 
-        if (!signature) {
-            return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
-        }
+    await dbConnect();
 
-        let event: Stripe.Event;
+    // ── 2. Idempotency check (§7.1) ──
+    // Store every received event ID. If we've seen it before, return 200 silently.
+    const existingEvent = await WebhookEvent.findOne({
+        stripe_event_id: event.id,
+    }).lean();
 
-        try {
-            event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-        } catch (err: any) {
-            console.error(`Webhook signature verification failed: ${err.message}`);
-            return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-        }
+    if (existingEvent) {
+        // Already processed — return 200 to prevent Stripe from retrying
+        console.log(`[webhook] Duplicate event ${event.id} — skipping.`);
+        return NextResponse.json({ received: true, duplicate: true });
+    }
 
-        await dbConnect();
+    // Record this event before processing to prevent race conditions
+    await WebhookEvent.create({
+        stripe_event_id: event.id,
+        event_type: event.type,
+        job_id: null, // updated below if we find the job
+        processed_at: new Date(),
+    });
 
-        // 1. Idempotency Check
-        const existingEvent = await WebhookEvent.findOne({ stripe_event_id: event.id });
-        if (existingEvent) {
-            return NextResponse.json({ received: true }, { status: 200 });
-        }
-
-        // 2. Lock the event immediately to prevent duplicate processing on Stripe retries
-        await WebhookEvent.create({
-            stripe_event_id: event.id,
-            event_type: event.type,
-            job_id: event.type === "checkout.session.completed" ? (event.data.object as Stripe.Checkout.Session).metadata?.jobId : undefined,
-        });
-
+    // ── 3. Handle relevant event types ──
+    try {
         if (event.type === "checkout.session.completed") {
-            const session = event.data.object as Stripe.Checkout.Session;
-            const jobId = session.metadata?.jobId;
-
-            if (jobId) {
-                const job = await Job.findById(jobId);
-
-                if (job && job.status === JobState.AWAITING_PAYMENT) {
-                    // Update Job State
-                    job.previous_state = job.status;
-                    job.status = JobState.PAYMENT_CONFIRMED;
-                    job.state_transitioned_at = new Date();
-                    await job.save();
-
-                    // Log the state change
-                    await JobStateLog.create({
-                        job_id: job._id,
-                        from_state: JobState.AWAITING_PAYMENT,
-                        to_state: JobState.PAYMENT_CONFIRMED,
-                        triggered_by: "stripe_webhook",
-                    });
-
-                    // Update the JobPayment record to 'completed'
-                    await JobPayment.findOneAndUpdate(
-                        { stripe_session_id: session.id },
-                        {
-                            status: "completed",
-                            stripe_payment_intent_id: session.payment_intent as string,
-                        },
-                    );
-
-                    console.log(`Payment confirmed for Job: ${jobId}. Triggering AI...`);
-
-                    // 3. THE CRITICAL FIX: We MUST await this fetch!
-                    // This forces Next.js to keep the route alive until OpenAI finishes generating the markdown.
-                    try {
-                        await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/generate-paid`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ jobId: job._id }),
-                        });
-                        console.log("AI Generation completed successfully.");
-                    } catch (err) {
-                        console.error("Failed to trigger AI generation from webhook:", err);
-                    }
-                }
-            }
+            await handleCheckoutCompleted(event);
+        } else if (event.type === "payment_intent.succeeded") {
+            // Secondary handler — most of the work happens in checkout.session.completed
+            console.log(`[webhook] payment_intent.succeeded: ${event.id}`);
         }
-
-        return NextResponse.json({ received: true }, { status: 200 });
+        // Other event types are acknowledged but not processed
     } catch (error: any) {
-        console.error("Webhook processing error:", error);
-        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+        console.error(`[webhook] Handler error for ${event.type}:`, error.message);
+        // Return 500 so Stripe retries — idempotency guard above ensures no duplicate
+        return NextResponse.json({ error: "Internal handler error." }, { status: 500 });
+    }
+
+    return NextResponse.json({ received: true });
+}
+
+// ─── Checkout Session Completed Handler ───────────────────────────────────────
+
+async function handleCheckoutCompleted(event: Stripe.Event) {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const jobId = session.metadata?.jobId;
+    const accessToken = session.metadata?.accessToken;
+    const upsells: string[] = JSON.parse(session.metadata?.upsells ?? "[]");
+
+    if (!jobId || !accessToken) {
+        console.error("[webhook] Missing jobId or accessToken in session metadata");
+        return;
+    }
+
+    // Update webhook record with job_id
+    await WebhookEvent.findOneAndUpdate({ stripe_event_id: event.id }, { job_id: jobId });
+
+    // ── 4. Payment lock check (§7.2) ──
+    // Job MUST be in AWAITING_PAYMENT. Any other state → discard.
+    const job = await Job.findOne({
+        _id: jobId,
+        access_token: accessToken,
+    }).lean<any>();
+
+    if (!job) {
+        console.error(`[webhook] Job ${jobId} not found`);
+        return;
+    }
+
+    if (job.status !== JobState.AWAITING_PAYMENT) {
+        console.warn(`[webhook] Job ${jobId} is in '${job.status}' — not AWAITING_PAYMENT. Discarding.`);
+        return;
+    }
+
+    // ── 5. Atomic state update: AWAITING_PAYMENT → PAYMENT_CONFIRMED (§7.1) ──
+    const updated = await Job.findOneAndUpdate(
+        {
+            _id: jobId,
+            status: JobState.AWAITING_PAYMENT, // atomic check — prevents race
+        },
+        {
+            status: JobState.PAYMENT_CONFIRMED,
+            previous_state: JobState.AWAITING_PAYMENT,
+            state_transitioned_at: new Date(),
+            stripe_payment_intent_id: session.payment_intent,
+        },
+        { new: true },
+    );
+
+    if (!updated) {
+        console.warn(`[webhook] Job ${jobId} state update race — skipping.`);
+        return;
+    }
+
+    // ── 6. Read extracted text from Temp collection (24-hr TTL, §4.3) ──
+    const tempDoc = await Temp.findOne({ job_id: String(jobId) }).lean<any>();
+
+    if (!tempDoc?.extracted_text) {
+        console.error(`[webhook] No extracted text in Temp for job ${jobId}`);
+        await Job.findByIdAndUpdate(jobId, {
+            status: JobState.FAILED,
+            previous_state: JobState.PAYMENT_CONFIRMED,
+            state_transitioned_at: new Date(),
+        });
+        return;
+    }
+
+    // ── 7. Trigger paid AI generation (webhook-only, §7.2) ──
+    try {
+        await generatePaidBreakdown(jobId, tempDoc.extracted_text, upsells);
+        // Clean up Temp document after successful paid generation
+        await Temp.deleteOne({ job_id: String(jobId) });
+    } catch (error: any) {
+        console.error(`[webhook] Paid generation failed for ${jobId}:`, error.message);
     }
 }

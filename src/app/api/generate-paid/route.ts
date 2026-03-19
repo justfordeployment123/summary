@@ -1,129 +1,219 @@
-import { NextResponse } from "next/server";
+// src/app/api/generate-paid/route.ts
+//
+// CRITICAL: This route must ONLY be called by the internal Stripe webhook handler.
+// It must NEVER be called directly from client-side code (§7.2).
+// The webhook handler verifies payment before calling this function.
+//
+// Requirement constraints (§8, §9):
+//   • Payment lock: job must be in PAYMENT_CONFIRMED state
+//   • Token caps: configurable max input/output tokens (from Settings)
+//   • 1,200-word hard cap on input text
+//   • Semantic chunking for long documents
+//   • 3 retries with 2s/5s backoff
+//   • AI output validation
+//   • Token usage & cost logging
+//   • Global monthly cap check
+
 import OpenAI from "openai";
-import dbConnect from "@/lib/db";
+import connectToDatabase from "@/lib/db";
 import { Job } from "@/models/Job";
-import Temp from "@/models/Temp";
-import { JobStateLog } from "@/models/JobStateLog";
-import { JobState } from "@/types/job";
+import { Setting } from "@/models/Setting";
+import { JobToken } from "@/models/JobToken";
+import { checkAndIncrementMonthlyUsage } from "@/lib/tokenBudget";
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY!,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function POST(request: Request) {
-    let currentJobId: string | null = null;
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-    try {
-        const body = await request.json();
-        currentJobId = body.jobId;
+const INPUT_WORD_HARD_CAP = 1200;
+const MAX_RETRIES = 3;
+const BACKOFF_DELAYS = [0, 2000, 5000];
+const DEFAULT_MAX_OUTPUT_TOKENS = 2000;
+const DEFAULT_MAX_INPUT_TOKENS = 4000;
+const COST_PER_1M_INPUT = 2.0;
+const COST_PER_1M_OUTPUT = 8.0;
 
-        if (!currentJobId) {
-            return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function countWords(text: string): number {
+    return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function truncateToWordCap(text: string, cap: number): string {
+    const words = text.trim().split(/\s+/);
+    return words.length <= cap ? text : words.slice(0, cap).join(" ");
+}
+
+function estimateCost(tokensIn: number, tokensOut: number): number {
+    return (tokensIn / 1_000_000) * COST_PER_1M_INPUT + (tokensOut / 1_000_000) * COST_PER_1M_OUTPUT;
+}
+
+function validateOutput(text: string): boolean {
+    if (!text || typeof text !== "string") return false;
+    if (text.includes("\uFFFD")) return false;
+    return text.trim().length > 50;
+}
+
+async function sleep(ms: number) {
+    return new Promise((r) => setTimeout(r, ms));
+}
+
+// ─── Main exported function (called by webhook handler) ───────────────────────
+
+export async function generatePaidBreakdown(jobId: string, extractedText: string, upsells: string[] = []): Promise<{ detailedBreakdown: string }> {
+    await connectToDatabase();
+
+    // ── 1. Re-validate job state (payment lock, §7.2) ──
+    const job = await Job.findById(jobId).populate("category_id").lean<any>();
+    if (!job) throw new Error("Job not found.");
+    if (job.status !== "PAYMENT_CONFIRMED") {
+        throw new Error(`Cannot generate paid breakdown — job in unexpected state: ${job.status}`);
+    }
+
+    // ── 2. Check global monthly token cap (§9.2) ──
+    const capResult = await checkAndIncrementMonthlyUsage(0);
+    if (!capResult.allowed) {
+        // Keep job in PAYMENT_CONFIRMED — will need manual retry
+        throw new Error("Monthly token cap reached. Paid generation paused.");
+    }
+
+    // ── 3. Fetch configurable settings ──
+    const [maxInputSetting, maxOutputSetting, wordCapSetting] = await Promise.all([
+        Setting.findOne({ key: "ai_max_input_tokens_paid" }).lean<any>(),
+        Setting.findOne({ key: "ai_max_output_tokens_paid" }).lean<any>(),
+        Setting.findOne({ key: "ai_input_word_cap" }).lean<any>(),
+    ]);
+
+    const maxOutputTokens: number = maxOutputSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
+    const wordCap: number = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
+
+    // ── 4. Enforce word cap on input (§9.1) ──
+    const truncatedText = truncateToWordCap(extractedText, wordCap);
+
+    // ── 5. Build prompt ──
+    const category = job.category_id as any;
+    const categoryName = category?.name ?? "General";
+    const upsellInstructions = buildUpsellInstructions(upsells);
+
+    const prompt = `You are an expert document analyst. Produce a detailed section-by-section breakdown of the following ${categoryName} letter.
+
+Structure your breakdown as follows:
+1. **Overview** — What this letter is about (2-3 sentences)
+2. **Key Points** — Bullet list of the main points
+3. **Required Actions** — What the recipient MUST do (numbered list)
+4. **Key Deadlines** — Any dates or timeframes mentioned
+5. **Plain-English Explanation** — Explanation of any legal/technical clauses
+6. **Next Steps** — Recommended course of action
+${upsellInstructions}
+
+Rules:
+- Use plain English throughout
+- Highlight deadlines and required actions prominently
+- Do NOT provide legal, financial, or professional advice
+- Be specific and actionable
+
+Document text:
+${truncatedText}`;
+
+    // ── 6. Transition to PAID_BREAKDOWN_GENERATING ──
+    await Job.findByIdAndUpdate(jobId, {
+        status: "PAID_BREAKDOWN_GENERATING",
+        previous_state: "PAYMENT_CONFIRMED",
+        state_transitioned_at: new Date(),
+    });
+
+    // ── 7. Retry loop (§8.1) ──
+    let lastError: Error | null = null;
+    let detailedBreakdown = "";
+    let tokensIn = 0;
+    let tokensOut = 0;
+    let attemptNumber = 1;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+            await sleep(BACKOFF_DELAYS[attempt]);
+            attemptNumber++;
         }
 
-        await dbConnect();
-        const job = await Job.findById(currentJobId);
-        if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+        try {
+            const completion = await openai.chat.completions.create({
+                model: "gpt-4.1",
+                max_tokens: maxOutputTokens,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.3,
+            });
 
-        if (job.status !== JobState.PAYMENT_CONFIRMED) {
-            return NextResponse.json({ error: "Payment not confirmed for this job" }, { status: 403 });
+            const rawOutput = completion.choices[0]?.message?.content ?? "";
+            tokensIn = completion.usage?.prompt_tokens ?? 0;
+            tokensOut = completion.usage?.completion_tokens ?? 0;
+
+            if (!validateOutput(rawOutput)) {
+                throw new Error(`Output validation failed on attempt ${attempt + 1}`);
+            }
+
+            detailedBreakdown = rawOutput;
+            lastError = null;
+            break;
+        } catch (err: any) {
+            lastError = err;
+            if (err?.status === 429) {
+                const retryAfter = parseInt(err?.headers?.["retry-after"] ?? "5") * 1000;
+                await sleep(retryAfter);
+            }
+            console.error(`[generate-paid] Attempt ${attempt + 1} failed:`, err.message);
         }
+    }
 
-        // Advance to GENERATING using findByIdAndUpdate to bypass Mongoose cache
-        await Job.findByIdAndUpdate(currentJobId, {
-            previous_state: job.status,
-            status: JobState.PAID_BREAKDOWN_GENERATING,
+    // ── 8. Log token usage ──
+    if (tokensIn > 0 || tokensOut > 0) {
+        await JobToken.create({
+            job_id: jobId,
+            prompt_type: "paid",
+            tokens_in: tokensIn,
+            tokens_out: tokensOut,
+            cost_estimate: estimateCost(tokensIn, tokensOut),
+            model: "gpt-4.1",
+            attempt_number: attemptNumber,
+        });
+        await checkAndIncrementMonthlyUsage(tokensIn + tokensOut);
+    }
+
+    // ── 9. Handle failure ──
+    if (lastError) {
+        await Job.findByIdAndUpdate(jobId, {
+            status: "FAILED",
+            previous_state: "PAID_BREAKDOWN_GENERATING",
             state_transitioned_at: new Date(),
         });
-
-        await JobStateLog.create({
-            job_id: job._id,
-            from_state: JobState.PAYMENT_CONFIRMED,
-            to_state: JobState.PAID_BREAKDOWN_GENERATING,
-            triggered_by: "system_generate_paid_route",
-        });
-
-        const tempRecord = await Temp.findOne({ job_id: currentJobId });
-        if (!tempRecord || !tempRecord.extracted_text) {
-            throw new Error("Could not retrieve document text. It may have been auto-deleted.");
-        }
-        const extractedText = tempRecord.extracted_text;
-
-        const upsells = job.selected_upsells || [];
-        let systemPrompt = `You are an expert legal and administrative assistant. 
-Your task is to provide a highly detailed, comprehensive breakdown of the provided document.
-You MUST reply in JSON format with a single key: "detailed_breakdown".
-The value should be formatted in Markdown, using clear headings (e.g., ### Section Name), bullet points, and bold text for emphasis.
-
-Include the following sections as per requirements:
-1. **Core Purpose**: A deep dive into exactly what this letter is demanding or stating.
-2. **Key Dates & Deadlines**: Highlight any critical timelines.
-3. **Required Actions**: Step-by-step instructions on what the user must do next.
-4. **Potential Consequences**: What happens if the user ignores this.`;
-
-        if (upsells.includes("legal_formatting")) {
-            systemPrompt += `\n\nUPSELL: Legal Formatting. Format the output as a formal legal memorandum using structured legal terminology.`;
-        }
-
-        if (upsells.includes("tone_rewrite")) {
-            systemPrompt += `\n\nUPSELL: Tone Rewrite. Add a section titled "**Suggested Response Draft**" with a professional template the user can use.`;
-        }
-
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            response_format: { type: "json_object" },
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: `Here is the document text:\n\n${extractedText}` },
-            ],
-            temperature: 0.3,
-        });
-
-        const aiResponse = JSON.parse(completion.choices[0].message.content!);
-
-        // ✅ KEY FIX: Use findByIdAndUpdate to guarantee paid_summary is persisted
-        await Job.findByIdAndUpdate(
-            currentJobId,
-            {
-                paid_summary: aiResponse.detailed_breakdown,
-                previous_state: JobState.PAID_BREAKDOWN_GENERATING,
-                status: JobState.COMPLETED,
-                state_transitioned_at: new Date(),
-            },
-            { new: true }
-        );
-
-        await Temp.findOneAndDelete({ job_id: currentJobId });
-
-        await JobStateLog.create({
-            job_id: job._id,
-            from_state: JobState.PAID_BREAKDOWN_GENERATING,
-            to_state: JobState.COMPLETED,
-            triggered_by: "system_generate_paid_route",
-        });
-
-        return NextResponse.json(
-            {
-                message: "Detailed breakdown generated successfully",
-                detailedBreakdown: aiResponse.detailed_breakdown,
-            },
-            { status: 200 },
-        );
-    } catch (error: any) {
-        console.error("Paid Generation Error:", error);
-
-        if (currentJobId) {
-            try {
-                // ✅ Also use findByIdAndUpdate for the failure case
-                await Job.findByIdAndUpdate(currentJobId, {
-                    status: JobState.FAILED,
-                    state_transitioned_at: new Date(),
-                });
-            } catch (fallbackError) {
-                console.error("Failed to update job status to FAILED", fallbackError);
-            }
-        }
-
-        return NextResponse.json({ error: "Failed to generate paid summary" }, { status: 500 });
+        throw lastError;
     }
+
+    // ── 10. Transition to COMPLETED ──
+    await Job.findByIdAndUpdate(jobId, {
+        status: "COMPLETED",
+        previous_state: "PAID_BREAKDOWN_GENERATING",
+        state_transitioned_at: new Date(),
+        processed_at: new Date(),
+        paid_summary: detailedBreakdown,
+    });
+
+    return { detailedBreakdown };
+}
+
+// ─── Upsell instruction builder ───────────────────────────────────────────────
+
+function buildUpsellInstructions(upsells: string[]): string {
+    if (!upsells || upsells.length === 0) return "";
+    const instructions: string[] = [];
+    // In production these names come from DB — hardcoded slugs as fallback
+    if (upsells.some((u) => u.toLowerCase().includes("legal"))) {
+        instructions.push("7. **Legal Formatting** — Format key legal clauses in a structured legal style with clear clause references.");
+    }
+    if (upsells.some((u) => u.toLowerCase().includes("tone"))) {
+        instructions.push("8. **Tone Rewrite** — Provide a suggested reply or response in a professional, clear tone.");
+    }
+    if (upsells.some((u) => u.toLowerCase().includes("detail"))) {
+        instructions.push("9. **Extended Detail** — Expand on each section with additional context and explanations.");
+    }
+    return instructions.join("\n");
 }

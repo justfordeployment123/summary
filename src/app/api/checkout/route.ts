@@ -1,38 +1,62 @@
+// src/app/api/checkout/route.ts
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
-import { Category } from "@/models/Category";
-import { JobPayment } from "@/models/JobPayment";
-import { JobStateLog } from "@/models/JobStateLog";
 import { JobState } from "@/types/job";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2026-02-25.clover" as any, // Cast to any if TS complains about the future API version
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
 
-export async function POST(request: Request) {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface CheckoutBody {
+    jobId: string;
+    accessToken: string;
+    upsells: string[];
+    disclaimerAcknowledged: boolean;
+    successUrl?: string;
+    cancelUrl?: string;
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
+export async function POST(req: Request) {
     try {
-        // 1. ADDED accessToken to the destructured body
-        const { jobId, accessToken, upsells, disclaimerAcknowledged } = await request.json();
-
-        // 2. Validate token presence
-        if (!jobId || !accessToken || !disclaimerAcknowledged) {
-            return NextResponse.json({ error: "Missing required parameters or disclaimer not acknowledged" }, { status: 400 });
-        }
-
         await dbConnect();
 
-        const job = await Job.findById(jobId);
-        if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+        const body: CheckoutBody = await req.json();
+        const { jobId, accessToken, upsells = [], disclaimerAcknowledged, successUrl, cancelUrl } = body;
 
-        // Security check: Ensure the token matches the database (Optional but recommended)
-        if (job.access_token !== accessToken) {
-            return NextResponse.json({ error: "Invalid access token" }, { status: 403 });
+        // ── 1. Validate disclaimer acknowledgement server-side (§13.2) ──
+        if (!disclaimerAcknowledged) {
+            return NextResponse.json({ error: "You must acknowledge the disclaimer before proceeding." }, { status: 400 });
         }
 
-        const category = await Category.findOne({ name: job.category_name });
-        const basePrice = category ? category.base_price : 499;
+        // ── 2. Validate inputs ──
+        if (!jobId || !accessToken) {
+            return NextResponse.json({ error: "Missing required fields: jobId, accessToken." }, { status: 400 });
+        }
+
+        // ── 3. Retrieve job & verify token (URL manipulation protection, §7.3) ──
+        const job = await Job.findOne({ _id: jobId, access_token: accessToken }).populate("category_id").lean<any>();
+
+        if (!job) {
+            return NextResponse.json({ error: "Invalid job reference or access token." }, { status: 403 });
+        }
+
+        // ── 4. Job must be FREE_SUMMARY_COMPLETE or AWAITING_PAYMENT to proceed ──
+        if (job.status !== JobState.FREE_SUMMARY_COMPLETE && job.status !== JobState.AWAITING_PAYMENT) {
+            return NextResponse.json(
+                {
+                    error: `Cannot create checkout session — job is in '${job.status}' state. Expected FREE_SUMMARY_COMPLETE or AWAITING_PAYMENT.`,
+                },
+                { status: 409 },
+            );
+        }
+
+        // ── 5. Build Stripe line items ──
+        const category = job.category_id as any;
+        const basePrice: number = category?.base_price ?? 499; // pence
 
         const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
             {
@@ -40,7 +64,7 @@ export async function POST(request: Request) {
                     currency: "gbp",
                     product_data: {
                         name: "Detailed Letter Breakdown",
-                        description: `Full explanation for your ${job.category_name || "document"}.`,
+                        description: `Section-by-section breakdown for: ${category?.name ?? "Letter"}`,
                     },
                     unit_amount: basePrice,
                 },
@@ -48,63 +72,74 @@ export async function POST(request: Request) {
             },
         ];
 
-        let totalAmount = basePrice;
+        // ── 6. Add upsell line items ──
+        if (upsells.length > 0) {
+            const Upsell = (await import("@/models/Upsell")).default;
+            const upsellDocs = await Upsell.find({
+                _id: { $in: upsells },
+                is_active: true,
+            }).lean<any[]>();
 
-        if (upsells?.includes("legal_formatting")) {
-            lineItems.push({
-                price_data: { currency: "gbp", product_data: { name: "Legal Formatting Output" }, unit_amount: 199 },
-                quantity: 1,
-            });
-            totalAmount += 199;
+            const categoryId = String(category?._id ?? job.category_id);
+
+            for (const upsell of upsellDocs) {
+                const price: number = upsell.category_prices?.[categoryId] ?? 0;
+                if (price > 0) {
+                    lineItems.push({
+                        price_data: {
+                            currency: "gbp",
+                            product_data: {
+                                name: upsell.name,
+                                description: upsell.description ?? undefined,
+                            },
+                            unit_amount: price,
+                        },
+                        quantity: 1,
+                    });
+                }
+            }
         }
 
-        if (upsells?.includes("tone_rewrite")) {
-            lineItems.push({
-                price_data: { currency: "gbp", product_data: { name: "Professional Tone Rewrite" }, unit_amount: 299 },
-                quantity: 1,
-            });
-            totalAmount += 299;
-        }
+        // ── 7. Resolve success / cancel URLs ──
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+        const finalSuccessUrl = successUrl ?? `${appUrl}/?job_id=${jobId}&token=${accessToken}&returning=1`;
+        const finalCancelUrl = cancelUrl ?? `${appUrl}/`;
 
+        // ── 8. Create Stripe Checkout Session ──
         const session = await stripe.checkout.sessions.create({
-            payment_method_types: ["card"],
-            line_items: lineItems,
             mode: "payment",
+            line_items: lineItems,
+            success_url: finalSuccessUrl,
+            cancel_url: finalCancelUrl,
+            automatic_tax: { enabled: false }, // Stripe Tax — must be enabled in dashboard (§14.1)
+            payment_method_types: ["card"], // Apple Pay, Google Pay, Link auto-enabled
             metadata: {
-                jobId: job._id.toString(),
-                upsells: JSON.stringify(upsells || []),
+                jobId: String(jobId),
+                accessToken,
+                upsells: JSON.stringify(upsells),
             },
-            // 3. THE CRITICAL FIX: Append the token to the success URL
-            success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/success?job_id=${job._id}&token=${accessToken}`,
-            cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/?canceled=true`,
+            payment_intent_data: {
+                metadata: {
+                    jobId: String(jobId),
+                    disclaimerAcknowledged: "true",
+                },
+            },
         });
 
-        job.disclaimer_acknowledged = true;
-        job.disclaimer_acknowledged_at = new Date();
-        job.previous_state = job.status;
-        job.status = JobState.AWAITING_PAYMENT;
-        job.state_transitioned_at = new Date();
-        await job.save();
-
-        await JobStateLog.create({
-            job_id: job._id,
-            from_state: JobState.FREE_SUMMARY_COMPLETE,
-            to_state: JobState.AWAITING_PAYMENT,
-            triggered_by: "system_checkout_route",
-        });
-
-        await JobPayment.create({
-            job_id: job._id,
+        // ── 9. Transition job to AWAITING_PAYMENT ──
+        await Job.findByIdAndUpdate(jobId, {
+            status: JobState.AWAITING_PAYMENT,
+            previous_state: job.status,
+            state_transitioned_at: new Date(),
+            disclaimer_acknowledged: true,
+            disclaimer_acknowledged_at: new Date(),
             stripe_session_id: session.id,
-            amount: totalAmount,
-            currency: "gbp",
-            status: "pending",
-            upsells_purchased: upsells || [],
+            upsells_purchased: upsells,
         });
 
-        return NextResponse.json({ url: session.url }, { status: 200 });
+        return NextResponse.json({ url: session.url });
     } catch (error: any) {
-        console.error("Checkout Error:", error);
-        return NextResponse.json({ error: "Failed to create checkout session" }, { status: 500 });
+        console.error("[checkout]", error);
+        return NextResponse.json({ error: error.message || "Failed to create checkout session." }, { status: 500 });
     }
 }

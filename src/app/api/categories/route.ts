@@ -7,10 +7,7 @@ export async function GET() {
         await dbConnect();
 
         // Only fetch active categories and sort them alphabetically
-        const categories = await Category.find({ is_active: true })
-            .select("_id name slug base_price")
-            .sort({ name: 1 })
-            .lean();
+        const categories = await Category.find({ is_active: true }).select("_id name slug base_price").sort({ name: 1 }).lean();
 
         return NextResponse.json({ categories }, { status: 200 });
     } catch (error) {
