@@ -2,6 +2,12 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { requestUploadUrl, uploadFileToS3, triggerOCR, generateFreeSummary } from "@/lib/api";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+
+// ─── Stripe setup ────────────────────────────────────────────────────────────
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -13,7 +19,7 @@ interface UpsellOption {
     name: string;
     description: string;
     is_active: boolean;
-    category_prices: Record<string, number>; // categoryId → price in pence
+    category_prices: Record<string, number>;
 }
 
 interface SummaryData {
@@ -26,7 +32,7 @@ interface SummaryData {
 interface CategoryOption {
     _id: string;
     name: string;
-    base_price: number; // in pence
+    base_price: number;
 }
 
 interface CompletedData {
@@ -38,24 +44,9 @@ interface CompletedData {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const URGENCY_CONFIG: Record<UrgencyLevel, { bg: string; text: string; dot: string; border: string }> = {
-    Routine: {
-        bg: "bg-emerald-50",
-        text: "text-emerald-700",
-        dot: "bg-emerald-500",
-        border: "border-emerald-200",
-    },
-    Important: {
-        bg: "bg-amber-50",
-        text: "text-amber-700",
-        dot: "bg-amber-500",
-        border: "border-amber-200",
-    },
-    "Time-Sensitive": {
-        bg: "bg-red-50",
-        text: "text-red-700",
-        dot: "bg-red-500",
-        border: "border-red-200",
-    },
+    Routine: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", border: "border-emerald-200" },
+    Important: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500", border: "border-amber-200" },
+    "Time-Sensitive": { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500", border: "border-red-200" },
 };
 
 const PROCESS_STEPS = [
@@ -81,7 +72,310 @@ function formatPrice(pence: number): string {
     return `£${(pence / 100).toFixed(2)}`;
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+/**
+ * Converts the markdown returned by GPT-4.1 into safe HTML.
+ * Handles: ## headings, **bold**, bullet lists, numbered lists, --- dividers, blank lines.
+ * No external dependency required — runs entirely in the browser.
+ */
+function markdownToHtml(md: string): string {
+    if (!md) return "";
+
+    const lines = md.split("\n");
+    const out: string[] = [];
+    let inUl = false;
+    let inOl = false;
+
+    const closeList = () => {
+        if (inUl) {
+            out.push("</ul>");
+            inUl = false;
+        }
+        if (inOl) {
+            out.push("</ol>");
+            inOl = false;
+        }
+    };
+
+    const parseLine = (line: string) =>
+        line
+            // **bold**
+            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+            // *italic*
+            .replace(/\*(.+?)\*/g, "<em>$1</em>")
+            // `code`
+            .replace(/`(.+?)`/g, "<code>$1</code>");
+
+    for (const raw of lines) {
+        const line = raw.trimEnd();
+
+        // Horizontal rule
+        if (/^---+$/.test(line.trim())) {
+            closeList();
+            out.push('<hr class="my-4 border-slate-200" />');
+            continue;
+        }
+
+        // ### h3
+        const h3 = line.match(/^###\s+(.*)/);
+        if (h3) {
+            closeList();
+            out.push(`<h3 class="text-base font-bold text-slate-800 mt-5 mb-2">${parseLine(h3[1])}</h3>`);
+            continue;
+        }
+
+        // ## h2
+        const h2 = line.match(/^##\s+(.*)/);
+        if (h2) {
+            closeList();
+            out.push(`<h2 class="text-lg font-bold text-slate-900 mt-6 mb-2">${parseLine(h2[1])}</h2>`);
+            continue;
+        }
+
+        // # h1
+        const h1 = line.match(/^#\s+(.*)/);
+        if (h1) {
+            closeList();
+            out.push(`<h1 class="text-xl font-bold text-slate-900 mt-6 mb-3">${parseLine(h1[1])}</h1>`);
+            continue;
+        }
+
+        // Unordered list: - item or * item
+        const ul = line.match(/^[-*]\s+(.*)/);
+        if (ul) {
+            if (inOl) {
+                out.push("</ol>");
+                inOl = false;
+            }
+            if (!inUl) {
+                out.push('<ul class="list-disc list-outside pl-5 space-y-1 my-2">');
+                inUl = true;
+            }
+            out.push(`<li class="text-slate-700 text-sm leading-relaxed">${parseLine(ul[1])}</li>`);
+            continue;
+        }
+
+        // Ordered list: 1. item
+        const ol = line.match(/^\d+\.\s+(.*)/);
+        if (ol) {
+            if (inUl) {
+                out.push("</ul>");
+                inUl = false;
+            }
+            if (!inOl) {
+                out.push('<ol class="list-decimal list-outside pl-5 space-y-1 my-2">');
+                inOl = true;
+            }
+            out.push(`<li class="text-slate-700 text-sm leading-relaxed">${parseLine(ol[1])}</li>`);
+            continue;
+        }
+
+        // Empty line
+        if (line.trim() === "") {
+            closeList();
+            out.push('<div class="h-2"></div>');
+            continue;
+        }
+
+        // Plain paragraph
+        closeList();
+        out.push(`<p class="text-slate-700 text-sm leading-relaxed">${parseLine(line)}</p>`);
+    }
+
+    closeList();
+    return out.join("\n");
+}
+
+// ─── Upsell Card Component ────────────────────────────────────────────────────
+
+interface UpsellCardProps {
+    upsell: UpsellOption;
+    price: number;
+    selected: boolean;
+    onToggle: () => void;
+    index: number;
+}
+
+const UPSELL_ICONS: Record<string, string> = {
+    "More Detail": `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/>`,
+    "Legal Formatting": `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971zm-16.5.52c-.99.143-1.99.317-3 .52m3-.52L2.25 15.697c-.122.499.106 1.028.589 1.202a5.989 5.989 0 002.031.352 5.989 5.989 0 002.031-.352c.483-.174.711-.703.59-1.202L5.25 4.971z"/>`,
+    "Tone Rewrite": `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/>`,
+};
+
+const UPSELL_ACCENTS = [
+    { ring: "#6366f1", glow: "#eef2ff", badge: "#4f46e5", label: "#e0e7ff" },
+    { ring: "#0d9488", glow: "#f0fdf4", badge: "#0f766e", label: "#ccfbf1" },
+    { ring: "#d97706", glow: "#fffbeb", badge: "#b45309", label: "#fef3c7" },
+];
+
+function UpsellCard({ upsell, price, selected, onToggle, index }: UpsellCardProps) {
+    const accent = UPSELL_ACCENTS[index % UPSELL_ACCENTS.length];
+    const iconPath = UPSELL_ICONS[upsell.name] || UPSELL_ICONS["More Detail"];
+
+    return (
+        <button
+            type="button"
+            onClick={onToggle}
+            style={{
+                position: "relative",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "14px",
+                width: "100%",
+                padding: "16px",
+                borderRadius: "14px",
+                border: selected ? `2px solid ${accent.ring}` : "1.5px solid #e2e8f0",
+                background: selected ? accent.glow : "#fafafa",
+                cursor: "pointer",
+                textAlign: "left",
+                transition: "all 0.18s cubic-bezier(0.4, 0, 0.2, 1)",
+                outline: "none",
+                boxShadow: selected ? `0 0 0 4px ${accent.ring}22` : "none",
+            }}
+        >
+            {/* Icon bubble */}
+            <div
+                style={{
+                    flexShrink: 0,
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    background: selected ? accent.badge : "#e2e8f0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "background 0.18s",
+                    marginTop: 1,
+                }}
+            >
+                <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={selected ? "#fff" : "#64748b"}
+                    style={{ transition: "stroke 0.18s" }}
+                    dangerouslySetInnerHTML={{ __html: iconPath }}
+                />
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 3 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: selected ? accent.badge : "#1e293b", lineHeight: 1.3 }}>{upsell.name}</span>
+                    {price > 0 && (
+                        <span
+                            style={{
+                                flexShrink: 0,
+                                fontSize: 13,
+                                fontWeight: 700,
+                                color: selected ? accent.badge : "#475569",
+                                background: selected ? accent.label : "#f1f5f9",
+                                padding: "2px 8px",
+                                borderRadius: 6,
+                                transition: "all 0.18s",
+                            }}
+                        >
+                            +{formatPrice(price)}
+                        </span>
+                    )}
+                </div>
+                {upsell.description && <p style={{ fontSize: 12.5, color: "#64748b", margin: 0, lineHeight: 1.5 }}>{upsell.description}</p>}
+            </div>
+
+            {/* Checkmark */}
+            <div
+                style={{
+                    flexShrink: 0,
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    border: selected ? `2px solid ${accent.badge}` : "2px solid #cbd5e1",
+                    background: selected ? accent.badge : "transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.18s",
+                    marginTop: 2,
+                }}
+            >
+                {selected && (
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                )}
+            </div>
+        </button>
+    );
+}
+
+// ─── Embedded Stripe Payment Form ─────────────────────────────────────────────
+
+interface EmbeddedPaymentFormProps {
+    clientSecret: string;
+    totalPrice: number;
+    onSuccess: () => void;
+    onError: (msg: string) => void;
+    isProcessing: boolean;
+    setIsProcessing: (v: boolean) => void;
+}
+
+function EmbeddedPaymentForm({ clientSecret, totalPrice, onSuccess, onError, isProcessing, setIsProcessing }: EmbeddedPaymentFormProps) {
+    const stripe = useStripe();
+    const elements = useElements();
+
+    const handlePay = async () => {
+        if (!stripe || !elements) return;
+        setIsProcessing(true);
+
+        const { error } = await stripe.confirmPayment({
+            elements,
+            confirmParams: { return_url: window.location.href },
+            redirect: "if_required",
+        });
+
+        if (error) {
+            onError(error.message || "Payment failed. Please try again.");
+            setIsProcessing(false);
+        } else {
+            onSuccess();
+        }
+    };
+
+    return (
+        <div>
+            <PaymentElement
+                options={{
+                    layout: "tabs",
+                    fields: { billingDetails: "auto" },
+                }}
+            />
+            <button
+                type="button"
+                onClick={handlePay}
+                disabled={isProcessing || !stripe || !elements}
+                className="w-full mt-5 py-4 rounded-xl font-bold text-base bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white transition-colors shadow-sm"
+            >
+                {isProcessing ? (
+                    <span className="flex items-center justify-center gap-2">
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                            />
+                        </svg>
+                        Processing payment…
+                    </span>
+                ) : (
+                    `Pay ${formatPrice(totalPrice)} — Get Breakdown →`
+                )}
+            </button>
+        </div>
+    );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Home() {
     // ── Categories & Upsells ──
@@ -111,14 +405,19 @@ export default function Home() {
     const [view, setView] = useState<PageView>("form");
     const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
     const [completedData, setCompletedData] = useState<CompletedData | null>(null);
-    const [isCheckingOut, setIsCheckingOut] = useState(false);
+
+    // ── Embedded Stripe payment ──
+    const [clientSecret, setClientSecret] = useState<string | null>(null);
+    const [isCreatingPaymentIntent, setIsCreatingPaymentIntent] = useState(false);
+    const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
+    const [showPaymentForm, setShowPaymentForm] = useState(false);
 
     // ── Payment polling ──
     const [pollCount, setPollCount] = useState(0);
     const [pollStatus, setPollStatus] = useState("Verifying payment…");
     const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // ── Result section ref (scroll-to) ──
+    // ── Refs ──
     const resultRef = useRef<HTMLDivElement>(null);
     const paymentRef = useRef<HTMLDivElement>(null);
 
@@ -150,7 +449,6 @@ export default function Home() {
         const returning = params.get("returning");
 
         if (jobId && token && returning === "1") {
-            // Restore summary state from sessionStorage if available
             const stored = sessionStorage.getItem(`job_${jobId}`);
             if (stored) {
                 try {
@@ -163,14 +461,10 @@ export default function Home() {
             }
             setView("processing_payment");
             startPolling(jobId, token);
-
-            // Clean URL
             window.history.replaceState({}, "", window.location.pathname);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    // ─── Cleanup poll on unmount ──────────────────────────────────────────────
 
     useEffect(() => {
         return () => {
@@ -265,10 +559,7 @@ export default function Home() {
 
             setCurrentStep(3);
             setUploadStatus(PROCESS_STEPS[3]);
-            const aiResult = await generateFreeSummary({
-                jobId,
-                extractedText: ocrResult.extractedText,
-            });
+            const aiResult = await generateFreeSummary({ jobId, extractedText: ocrResult.extractedText });
 
             setCurrentStep(4);
             setUploadStatus(PROCESS_STEPS[4]);
@@ -280,10 +571,7 @@ export default function Home() {
                 accessToken,
             };
             setSummaryData(data);
-
-            // Persist for returning-from-Stripe flow
             sessionStorage.setItem(`job_${jobId}`, JSON.stringify({ ...data, firstName: firstName.trim() }));
-
             setView("summary");
         } catch (error: any) {
             setIsError(true);
@@ -293,7 +581,16 @@ export default function Home() {
         }
     };
 
-    // ─── Upsell toggle ────────────────────────────────────────────────────────
+    // ─── Upsells for current category ────────────────────────────────────────
+
+    /**
+     * Only show upsells that have a configured price > 0 for the selected category.
+     * If no upsells exist for this category, the section is hidden entirely.
+     */
+    const categoryUpsells = upsells.filter((u) => {
+        const price = u.category_prices?.[categoryId];
+        return typeof price === "number" && price > 0;
+    });
 
     const toggleUpsell = (id: string) => {
         setSelectedUpsells((prev) => (prev.includes(id) ? prev.filter((u) => u !== id) : [...prev, id]));
@@ -319,9 +616,9 @@ export default function Home() {
         return base + upsellTotal;
     };
 
-    // ─── Checkout ─────────────────────────────────────────────────────────────
+    // ─── Create Payment Intent & show embedded form ───────────────────────────
 
-    const handleCheckout = async () => {
+    const handleProceedToPayment = async () => {
         if (!disclaimerAcknowledged) {
             setUploadStatus("Please acknowledge the disclaimer before proceeding.");
             setIsError(true);
@@ -329,12 +626,12 @@ export default function Home() {
         }
         if (!summaryData) return;
 
-        setIsCheckingOut(true);
+        setIsCreatingPaymentIntent(true);
         setIsError(false);
         setUploadStatus("");
 
         try {
-            const res = await fetch("/api/checkout", {
+            const res = await fetch("/api/create-payment-intent", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -342,23 +639,35 @@ export default function Home() {
                     accessToken: summaryData.accessToken,
                     upsells: selectedUpsells,
                     disclaimerAcknowledged: true,
-                    // Tell Stripe where to return (same page, with flags)
-                    successUrl: `${window.location.origin}/?job_id=${summaryData.jobId}&token=${summaryData.accessToken}&returning=1`,
-                    cancelUrl: window.location.href,
                 }),
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Failed to start checkout.");
-            if (data.url) {
-                window.location.href = data.url;
-            } else {
-                throw new Error("No checkout URL returned.");
-            }
+            if (!res.ok) throw new Error(data.error || "Failed to initialise payment.");
+            if (!data.clientSecret) throw new Error("No client secret returned.");
+
+            setClientSecret(data.clientSecret);
+            setShowPaymentForm(true);
+
+            // Scroll to payment form
+            setTimeout(() => paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
         } catch (error: any) {
-            setIsCheckingOut(false);
             setIsError(true);
-            setUploadStatus(error.message || "Checkout failed. Please try again.");
+            setUploadStatus(error.message || "Failed to initialise payment. Please try again.");
+        } finally {
+            setIsCreatingPaymentIntent(false);
         }
+    };
+
+    const handlePaymentSuccess = () => {
+        // Payment confirmed client-side — now poll for webhook-triggered breakdown
+        if (!summaryData) return;
+        setView("processing_payment");
+        startPolling(summaryData.jobId, summaryData.accessToken);
+    };
+
+    const handlePaymentError = (msg: string) => {
+        setIsError(true);
+        setUploadStatus(msg);
     };
 
     // ─── Payment polling ──────────────────────────────────────────────────────
@@ -389,7 +698,6 @@ export default function Home() {
                         referenceId: data.referenceId ?? "",
                     });
                     setView("completed");
-                    // Clean up stored session
                     sessionStorage.removeItem(`job_${jobId}`);
                     return;
                 }
@@ -420,7 +728,6 @@ export default function Home() {
             pollTimerRef.current = setTimeout(poll, POLL_INTERVAL);
         };
 
-        // Initial delay to allow webhook processing
         pollTimerRef.current = setTimeout(poll, 2000);
     };
 
@@ -447,6 +754,9 @@ export default function Home() {
         setCompletedData(null);
         setSelectedUpsells([]);
         setCurrentStep(0);
+        setClientSecret(null);
+        setShowPaymentForm(false);
+        setIsPaymentProcessing(false);
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
 
@@ -487,13 +797,7 @@ export default function Home() {
                     {STEPS.map((s, i) => (
                         <div key={s.num} className="flex items-center gap-2">
                             <div
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                                    i === activeStep
-                                        ? "bg-teal-600 text-white"
-                                        : i < activeStep
-                                          ? "bg-teal-100 text-teal-700"
-                                          : "bg-slate-100 text-slate-400"
-                                }`}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${i === activeStep ? "bg-teal-600 text-white" : i < activeStep ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400"}`}
                             >
                                 {i < activeStep ? (
                                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -531,7 +835,10 @@ export default function Home() {
                                 </label>
                                 <select
                                     value={categoryId}
-                                    onChange={(e) => setCategoryId(e.target.value)}
+                                    onChange={(e) => {
+                                        setCategoryId(e.target.value);
+                                        setSelectedUpsells([]);
+                                    }}
                                     required
                                     disabled={isUploading || isLoadingCategories}
                                     className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:opacity-60 transition"
@@ -602,13 +909,7 @@ export default function Home() {
                                 }}
                                 onDragLeave={() => setIsDragging(false)}
                                 onDrop={handleDrop}
-                                className={`relative mt-2 border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                                    isDragging
-                                        ? "border-teal-500 bg-teal-50"
-                                        : file
-                                          ? "border-teal-400 bg-teal-50/40"
-                                          : "border-slate-300 hover:border-teal-400 hover:bg-slate-50"
-                                } ${isUploading ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}
+                                className={`relative mt-2 border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging ? "border-teal-500 bg-teal-50" : file ? "border-teal-400 bg-teal-50/40" : "border-slate-300 hover:border-teal-400 hover:bg-slate-50"} ${isUploading ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}
                             >
                                 <input
                                     type="file"
@@ -651,9 +952,7 @@ export default function Home() {
                             {/* Status banner */}
                             {uploadStatus && (
                                 <div
-                                    className={`px-4 py-3 rounded-lg text-sm font-medium flex items-start gap-2 ${
-                                        isError ? "bg-red-50 text-red-700 border border-red-200" : "bg-teal-50 text-teal-800 border border-teal-200"
-                                    }`}
+                                    className={`px-4 py-3 rounded-lg text-sm font-medium flex items-start gap-2 ${isError ? "bg-red-50 text-red-700 border border-red-200" : "bg-teal-50 text-teal-800 border border-teal-200"}`}
                                 >
                                     {isError ? (
                                         <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -750,14 +1049,14 @@ export default function Home() {
                             </div>
                         </div>
 
-                        {/* ── Inline payment card ── */}
+                        {/* ── Full Breakdown card ── */}
                         <div ref={paymentRef} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                             {/* Card header */}
                             <div className="px-8 pt-7 pb-5 border-b border-slate-100">
                                 <div className="flex items-start gap-3">
                                     <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center shrink-0 mt-0.5">
                                         <svg
-                                            className="w-4.5 h-4.5 text-teal-600"
+                                            className="text-teal-600"
                                             fill="none"
                                             viewBox="0 0 24 24"
                                             stroke="currentColor"
@@ -801,41 +1100,28 @@ export default function Home() {
                                     </ul>
                                 </div>
 
-                                {/* Upsells */}
-                                {upsells.length > 0 && (
+                                {/* ── Upsells — only shown if category has configured upsells ── */}
+                                {categoryUpsells.length > 0 && !showPaymentForm && (
                                     <div>
-                                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Optional add-ons</p>
-                                        <div className="space-y-2">
-                                            {upsells.map((upsell) => {
-                                                const price = getUpsellPrice(upsell);
-                                                const selected = selectedUpsells.includes(upsell._id);
-                                                return (
-                                                    <label
-                                                        key={upsell._id}
-                                                        className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all select-none ${
-                                                            selected
-                                                                ? "border-teal-500 bg-teal-50"
-                                                                : "border-slate-200 hover:border-slate-300 bg-slate-50"
-                                                        }`}
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={selected}
-                                                            onChange={() => toggleUpsell(upsell._id)}
-                                                            className="mt-0.5 w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
-                                                        />
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-semibold text-slate-800">{upsell.name}</p>
-                                                            {upsell.description && (
-                                                                <p className="text-xs text-slate-500 mt-0.5">{upsell.description}</p>
-                                                            )}
-                                                        </div>
-                                                        {price > 0 && (
-                                                            <span className="text-sm font-bold text-slate-700 shrink-0">+{formatPrice(price)}</span>
-                                                        )}
-                                                    </label>
-                                                );
-                                            })}
+                                        <div className="flex items-center justify-between mb-3">
+                                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Optional add-ons</p>
+                                            {selectedUpsells.length > 0 && (
+                                                <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
+                                                    {selectedUpsells.length} selected
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="space-y-2.5">
+                                            {categoryUpsells.map((upsell, index) => (
+                                                <UpsellCard
+                                                    key={upsell._id}
+                                                    upsell={upsell}
+                                                    price={getUpsellPrice(upsell)}
+                                                    selected={selectedUpsells.includes(upsell._id)}
+                                                    onToggle={() => toggleUpsell(upsell._id)}
+                                                    index={index}
+                                                />
+                                            ))}
                                         </div>
                                     </div>
                                 )}
@@ -860,53 +1146,130 @@ export default function Home() {
                                         })}
                                         <div className="pt-2 border-t border-slate-200 flex items-center justify-between font-bold text-slate-900">
                                             <span>Total</span>
-                                            <span>{formatPrice(getTotalPrice())}</span>
+                                            <span className="text-lg">{formatPrice(getTotalPrice())}</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Disclaimer checkbox */}
-                                <label className="flex items-start gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        checked={disclaimerAcknowledged}
-                                        onChange={(e) => setDisclaimerAcknowledged(e.target.checked)}
-                                        className="mt-0.5 w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
-                                    />
-                                    <span className="text-sm text-slate-600">
-                                        I understand this is an AI-generated summary and not professional advice.
-                                    </span>
-                                </label>
+                                {!showPaymentForm && (
+                                    <label className="flex items-start gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={disclaimerAcknowledged}
+                                            onChange={(e) => setDisclaimerAcknowledged(e.target.checked)}
+                                            className="mt-0.5 w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                                        />
+                                        <span className="text-sm text-slate-600">
+                                            I understand this is an AI-generated summary and not professional advice.
+                                        </span>
+                                    </label>
+                                )}
 
                                 {/* Error */}
                                 {uploadStatus && isError && (
-                                    <div className="px-4 py-3 rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200">
+                                    <div className="px-4 py-3 rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200 flex items-start gap-2">
+                                        <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                            />
+                                        </svg>
                                         {uploadStatus}
                                     </div>
                                 )}
 
-                                {/* CTA */}
-                                <button
-                                    onClick={handleCheckout}
-                                    disabled={!disclaimerAcknowledged || isCheckingOut}
-                                    className="w-full py-4 rounded-xl font-bold text-base bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white transition-colors shadow-sm"
-                                >
-                                    {isCheckingOut ? (
-                                        <span className="flex items-center justify-center gap-2">
-                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                {/* ── Embedded Stripe Payment Panel ── */}
+                                {showPaymentForm && clientSecret ? (
+                                    <div className="space-y-4">
+                                        {/* Divider with label */}
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex-1 h-px bg-slate-200" />
+                                            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Payment details</span>
+                                            <div className="flex-1 h-px bg-slate-200" />
+                                        </div>
+
+                                        {/* Stripe Elements wrapper */}
+                                        <div className="rounded-xl border border-slate-200 p-5 bg-slate-50/50">
+                                            <Elements
+                                                stripe={stripePromise}
+                                                options={{
+                                                    clientSecret,
+                                                    appearance: {
+                                                        theme: "stripe",
+                                                        variables: {
+                                                            colorPrimary: "#0d9488",
+                                                            colorBackground: "#ffffff",
+                                                            colorText: "#1e293b",
+                                                            colorDanger: "#dc2626",
+                                                            fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
+                                                            borderRadius: "10px",
+                                                            spacingUnit: "4px",
+                                                        },
+                                                        rules: {
+                                                            ".Input": { border: "1.5px solid #e2e8f0", boxShadow: "none", padding: "11px 14px" },
+                                                            ".Input:focus": { border: "1.5px solid #0d9488", boxShadow: "0 0 0 3px #ccfbf1" },
+                                                            ".Label": { fontSize: "12px", fontWeight: "600", color: "#64748b", marginBottom: "6px" },
+                                                            ".Tab": { border: "1.5px solid #e2e8f0", borderRadius: "10px" },
+                                                            ".Tab--selected": { border: "1.5px solid #0d9488", backgroundColor: "#f0fdfa" },
+                                                        },
+                                                    },
+                                                }}
+                                            >
+                                                <EmbeddedPaymentForm
+                                                    clientSecret={clientSecret}
+                                                    totalPrice={getTotalPrice()}
+                                                    onSuccess={handlePaymentSuccess}
+                                                    onError={handlePaymentError}
+                                                    isProcessing={isPaymentProcessing}
+                                                    setIsProcessing={setIsPaymentProcessing}
                                                 />
-                                            </svg>
-                                            Redirecting to Stripe…
-                                        </span>
-                                    ) : (
-                                        `Pay ${formatPrice(getTotalPrice())} — Get Breakdown →`
-                                    )}
-                                </button>
+                                            </Elements>
+                                        </div>
+
+                                        {/* Change mind — go back */}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setShowPaymentForm(false);
+                                                setClientSecret(null);
+                                                setIsError(false);
+                                                setUploadStatus("");
+                                            }}
+                                            className="w-full text-sm text-slate-400 hover:text-slate-600 transition-colors py-1"
+                                        >
+                                            ← Back to options
+                                        </button>
+                                    </div>
+                                ) : (
+                                    /* ── Proceed to Payment CTA ── */
+                                    !showPaymentForm && (
+                                        <button
+                                            type="button"
+                                            onClick={handleProceedToPayment}
+                                            disabled={!disclaimerAcknowledged || isCreatingPaymentIntent}
+                                            className="w-full py-4 rounded-xl font-bold text-base bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white transition-colors shadow-sm"
+                                        >
+                                            {isCreatingPaymentIntent ? (
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                                        />
+                                                    </svg>
+                                                    Preparing payment…
+                                                </span>
+                                            ) : (
+                                                `Pay ${formatPrice(getTotalPrice())} — Get Breakdown →`
+                                            )}
+                                        </button>
+                                    )
+                                )}
 
                                 {/* Trust signals */}
                                 <div className="flex items-center justify-center gap-4 text-xs text-slate-400">
@@ -929,7 +1292,7 @@ export default function Home() {
                             </div>
                         </div>
 
-                        {/* ── Payment processing overlay (replaces payment card once redirected back) ── */}
+                        {/* ── Payment processing overlay ── */}
                         {view === "processing_payment" && (
                             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                                 <div className="px-8 py-12 text-center">
@@ -963,11 +1326,11 @@ export default function Home() {
                 )}
 
                 {/* ══════════════════════════════════════════════════════════════
-                    VIEW: COMPLETED (breakdown revealed on same page)
+                    VIEW: COMPLETED
                 ══════════════════════════════════════════════════════════════ */}
                 {view === "completed" && summaryData && completedData && (
                     <div className="space-y-5">
-                        {/* Free summary (collapsed, still visible) */}
+                        {/* Free summary */}
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="px-8 pt-7 pb-5 border-b border-slate-100">
                                 <div className="flex items-center justify-between flex-wrap gap-3">
@@ -985,9 +1348,8 @@ export default function Home() {
                             </div>
                         </div>
 
-                        {/* Detailed breakdown card */}
+                        {/* Detailed breakdown */}
                         <div ref={resultRef} className="bg-white rounded-2xl shadow-sm border border-teal-200 overflow-hidden ring-1 ring-teal-100">
-                            {/* Success header */}
                             <div className="px-8 pt-7 pb-5 border-b border-slate-100">
                                 <div className="flex items-start justify-between gap-4 flex-wrap">
                                     <div>
@@ -1007,14 +1369,10 @@ export default function Home() {
                                 </div>
                             </div>
 
-                            {/* Breakdown content */}
                             <div className="px-8 py-7">
-                                <div className="prose prose-slate max-w-none text-sm leading-relaxed whitespace-pre-wrap font-sans text-slate-700">
-                                    {completedData.detailedBreakdown}
-                                </div>
+                                <div className="max-w-none" dangerouslySetInnerHTML={{ __html: markdownToHtml(completedData.detailedBreakdown) }} />
                             </div>
 
-                            {/* PDF disclaimer footer */}
                             <div className="px-8 py-4 bg-slate-50 border-t border-slate-100">
                                 <p className="text-xs text-slate-400 text-center">
                                     This document is an AI-generated summary for informational purposes only and does not constitute legal, financial,

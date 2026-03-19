@@ -1,4 +1,5 @@
 // src/lib/api.ts
+
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
 export interface UploadInitPayload {
@@ -116,14 +117,58 @@ export async function generateFreeSummary(data: GenerateFreePayload): Promise<Ge
     return res.json();
 }
 
-// ─── Checkout ─────────────────────────────────────────────────────────────────
+// ─── Payment: Embedded Elements flow (primary) ────────────────────────────────
 
-export interface CheckoutPayload {
+export interface CreatePaymentIntentPayload {
     jobId: string;
     accessToken: string;
     upsells: string[]; // array of upsell _id strings
     disclaimerAcknowledged: boolean;
-    successUrl: string; // same-page return URL with flags
+}
+
+export interface CreatePaymentIntentResponse {
+    clientSecret: string;
+}
+
+/**
+ * Step 5a (embedded flow): Creates a Stripe PaymentIntent and returns the
+ * clientSecret which is passed to <Elements> to render the inline payment form.
+ *
+ * The server:
+ *   - Validates disclaimerAcknowledged (§13.2)
+ *   - Re-validates job state and access token (§7.3)
+ *   - Calculates the total amount server-side from DB prices (never trust client)
+ *   - Re-uses an existing pending intent if the user refreshes (idempotent)
+ *   - Transitions job to AWAITING_PAYMENT and stores stripe_payment_intent_id
+ *
+ * Payment confirmation is triggered by the verified webhook (payment_intent.succeeded),
+ * NOT by the client (§7.2).
+ */
+export async function createPaymentIntent(
+    data: CreatePaymentIntentPayload,
+): Promise<CreatePaymentIntentResponse> {
+    const res = await fetch("/api/create-payment-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to initialise payment.");
+    }
+
+    return res.json();
+}
+
+// ─── Payment: Hosted Checkout flow (legacy / fallback) ───────────────────────
+
+export interface CheckoutPayload {
+    jobId: string;
+    accessToken: string;
+    upsells: string[];
+    disclaimerAcknowledged: boolean;
+    successUrl: string;
     cancelUrl: string;
 }
 
@@ -132,10 +177,12 @@ export interface CheckoutResponse {
 }
 
 /**
- * Step 5: Ask backend to create a Stripe Checkout Session.
- * The server validates disclaimerAcknowledged before creating the session.
- * successUrl & cancelUrl are passed from the client so Stripe returns to
- * the correct page/state (the single-page flow).
+ * Step 5b (hosted Checkout flow — legacy): Creates a Stripe Checkout Session
+ * and returns the hosted page URL to redirect the user to.
+ *
+ * Keep this for fallback / server-side rendering contexts where the embedded
+ * Elements form cannot be used (e.g. no-JS environments, future admin flows).
+ * The primary flow uses createPaymentIntent + <Elements> instead.
  */
 export async function createCheckoutSession(data: CheckoutPayload): Promise<CheckoutResponse> {
     const res = await fetch("/api/checkout", {
@@ -163,11 +210,17 @@ export interface JobStatusResponse {
 }
 
 /**
- * Step 6: Poll job status after returning from Stripe.
- * The token is passed in the query string (URL Enumeration Guard requirement).
- * Called repeatedly on the same page until status === "COMPLETED" or "FAILED".
+ * Step 6: Poll job status after payment completes.
+ * Used in both flows — embedded (after stripe.confirmPayment resolves) and
+ * hosted Checkout (after returning from Stripe's success_url redirect).
+ *
+ * The token is passed in the query string (URL Enumeration Guard, §7.3).
+ * Called repeatedly until status === "COMPLETED" or "FAILED".
  */
-export async function checkJobStatus(jobId: string, accessToken: string): Promise<JobStatusResponse> {
+export async function checkJobStatus(
+    jobId: string,
+    accessToken: string,
+): Promise<JobStatusResponse> {
     const res = await fetch(`/api/jobs/${jobId}/status?token=${accessToken}`);
 
     if (!res.ok) {
@@ -193,7 +246,10 @@ export interface UpsellsResponse {
 }
 
 /**
- * Fetches active upsell options to display on the payment card.
+ * Fetches all active upsell options.
+ * The frontend filters these client-side by category (only shows upsells
+ * where category_prices[categoryId] > 0) — see page.tsx categoryUpsells.
+ * The server re-validates prices before charging (§7, §15).
  */
 export async function fetchUpsells(): Promise<UpsellsResponse> {
     const res = await fetch("/api/upsells");
@@ -212,8 +268,12 @@ export async function fetchUpsells(): Promise<UpsellsResponse> {
  * Opens a download link in a new tab.
  * The server validates: job token is valid AND job.status === COMPLETED
  * AND payment_status === confirmed before serving the file.
- * Download links expire 72 hours after job completion (server-enforced).
+ * Download links expire 72 hours after job completion (server-enforced, §7.3).
  */
-export function openDownload(jobId: string, accessToken: string, format: "pdf" | "docx" | "txt"): void {
+export function openDownload(
+    jobId: string,
+    accessToken: string,
+    format: "pdf" | "docx" | "txt",
+): void {
     window.open(`/api/download/${format}?job_id=${jobId}&token=${accessToken}`, "_blank");
 }
