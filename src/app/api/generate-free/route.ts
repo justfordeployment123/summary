@@ -8,12 +8,14 @@
 //   • Retry logic: 3 attempts with 2s / 5s backoff (§8.1)
 //   • AI output validation: non-empty, minimum length, valid encoding
 //   • Global monthly token cap check (§9.2)
+//   • Category-specific prompt fetched from DB (§10.2) — falls back to hardcoded default
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
 import { Setting } from "@/models/Setting";
+import { Prompt } from "@/models/Prompt";
 import { JobState } from "@/types/job";
 import { JobToken } from "@/models/JobToken";
 import { checkAndIncrementMonthlyUsage } from "@/lib/tokenBudget";
@@ -22,15 +24,15 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const INPUT_WORD_HARD_CAP = 1200;   // §9.1 — configurable via Admin, default here
-const FREE_SUMMARY_MIN_WORDS = 100; // §11
-const FREE_SUMMARY_MAX_WORDS = 130; // §11
-const MAX_RETRIES = 3;
-const BACKOFF_DELAYS = [0, 2000, 5000]; // ms before each attempt
+const INPUT_WORD_HARD_CAP    = 1200;
+const FREE_SUMMARY_MIN_WORDS = 100;
+const FREE_SUMMARY_MAX_WORDS = 130;
+const MAX_RETRIES            = 3;
+const BACKOFF_DELAYS         = [0, 2000, 5000]; // ms before each attempt
 const DEFAULT_MAX_OUTPUT_TOKENS = 300;
-const DEFAULT_MAX_INPUT_TOKENS = 2000;
-// GPT-4.1 pricing (per 1M tokens, in USD) — used for cost estimation §9.1
-const COST_PER_1M_INPUT = 2.0;
+const DEFAULT_MAX_INPUT_TOKENS  = 2000;
+// GPT-4.1 pricing (per 1M tokens, USD) — used for cost estimation §9.1
+const COST_PER_1M_INPUT  = 2.0;
 const COST_PER_1M_OUTPUT = 8.0;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -52,7 +54,6 @@ function estimateCost(tokensIn: number, tokensOut: number): number {
 
 function validateAIOutput(text: string): boolean {
     if (!text || typeof text !== "string") return false;
-    // Must be valid UTF-8 (JS strings are UTF-16, but check for replacement char)
     if (text.includes("\uFFFD")) return false;
     const wordCount = countWords(text);
     return wordCount >= FREE_SUMMARY_MIN_WORDS;
@@ -60,6 +61,86 @@ function validateAIOutput(text: string): boolean {
 
 async function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ─── DB Prompt Lookup (§10.2) ─────────────────────────────────────────────────
+//
+// Priority order:
+//   1. Active category-specific free prompt for this category
+//   2. Active generic free prompt (no category_id)
+//   3. Hardcoded fallback (below)
+//
+// Placeholders in the stored template are replaced before sending to OpenAI:
+//   {{document_text}} → truncatedText
+//   {{category}}      → categoryName
+//   {{urgency}}       → not used in free prompts (urgency is OUTPUT, not input)
+
+async function resolvePromptTemplate(
+    categoryId: string | null,
+    categoryName: string,
+    documentText: string,
+): Promise<string> {
+    try {
+        // 1. Try category-specific prompt first
+        if (categoryId) {
+            const categoryPrompt = await Prompt.findOne({
+                category_id: categoryId,
+                type: "free",
+                is_active: true,
+            })
+                .sort({ version: -1 })
+                .lean<{ prompt_text: string }>();
+
+            if (categoryPrompt?.prompt_text) {
+                return hydratePlaceholders(categoryPrompt.prompt_text, { categoryName, documentText });
+            }
+        }
+
+        // 2. Try generic prompt (no category_id set)
+        const genericPrompt = await Prompt.findOne({
+            category_id: { $exists: false },
+            type: "free",
+            is_active: true,
+        })
+            .sort({ version: -1 })
+            .lean<{ prompt_text: string }>();
+
+        if (genericPrompt?.prompt_text) {
+            return hydratePlaceholders(genericPrompt.prompt_text, { categoryName, documentText });
+        }
+    } catch (err) {
+        // Log but don't block — fall through to hardcoded default
+        console.warn("[generate-free] Failed to load prompt from DB, using fallback:", err);
+    }
+
+    // 3. Hardcoded fallback (used when no DB prompt exists yet)
+    return buildFallbackPrompt(categoryName, documentText);
+}
+
+function hydratePlaceholders(
+    template: string,
+    vars: { categoryName: string; documentText: string },
+): string {
+    return template
+        .replace(/\{\{document_text\}\}/g, vars.documentText)
+        .replace(/\{\{category\}\}/g, vars.categoryName);
+}
+
+function buildFallbackPrompt(categoryName: string, documentText: string): string {
+    return `You are a plain-English document simplifier.
+The user has uploaded a ${categoryName} letter.
+
+Summarise the letter in EXACTLY 100-130 words of plain English. Include an urgency classification at the end on its own line in this exact format: URGENCY: Routine|Important|Time-Sensitive
+
+Rules:
+- No more than 130 words, no fewer than 100 words
+- Plain English only — no jargon, no legal language
+- Be specific about what the letter says and what the recipient needs to know
+- Do NOT include professional advice
+- End with: URGENCY: [level]
+
+Document text:
+${documentText}`;
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -84,12 +165,11 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Job not found." }, { status: 404 });
         }
         if (![JobState.OCR_PROCESSING, JobState.FREE_SUMMARY_GENERATING, JobState.UPLOADED].includes(job.status)) {
-            // Allow re-generation if stuck, but log
             console.warn(`[generate-free] Job ${jobId} in unexpected state: ${job.status}`);
         }
 
         // ── 2. Check global monthly token cap (§9.2) ──
-        const capResult = await checkAndIncrementMonthlyUsage(0); // check only, increment later
+        const capResult = await checkAndIncrementMonthlyUsage(0);
         if (!capResult.allowed) {
             return NextResponse.json(
                 { error: "Service temporarily unavailable. Please try again later." },
@@ -98,56 +178,37 @@ export async function POST(req: Request) {
         }
 
         // ── 3. Fetch configurable settings ──
-        const [maxInputTokensSetting, maxOutputTokensSetting, wordCapSetting] =
-            await Promise.all([
-                Setting.findOne({ key: "ai_max_input_tokens_free" }).lean<any>(),
-                Setting.findOne({ key: "ai_max_output_tokens_free" }).lean<any>(),
-                Setting.findOne({ key: "ai_input_word_cap" }).lean<any>(),
-            ]);
+        const [maxOutputTokensSetting, wordCapSetting] = await Promise.all([
+            Setting.findOne({ key: "ai_max_output_tokens_free" }).lean<any>(),
+            Setting.findOne({ key: "ai_input_word_cap" }).lean<any>(),
+        ]);
 
-        const maxInputTokens: number =
-            maxInputTokensSetting?.value ?? DEFAULT_MAX_INPUT_TOKENS;
-        const maxOutputTokens: number =
-            maxOutputTokensSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
-        const wordCap: number = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
+        const maxOutputTokens: number = maxOutputTokensSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
+        const wordCap: number         = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
 
         // ── 4. Enforce 1,200-word hard cap on input (§9.1) ──
         const truncatedText = truncateToWordCap(extractedText, wordCap);
-        const inputWordCount = countWords(truncatedText);
 
-        // ── 5. Build prompt (category-aware, §10) ──
-        const category = job.category_id as any;
+        // ── 5. Resolve prompt from DB (§10.2), fall back to hardcoded if none ──
+        const category     = job.category_id as any;
+        const categoryId   = category?._id?.toString() ?? null;
         const categoryName = category?.name ?? "General";
 
-        // In production, prompts are fetched from DB (§10.2).
-        // Fallback prompt shown here.
-        const prompt = `You are a plain-English document simplifier. 
-The user has uploaded a ${categoryName} letter.
+        const prompt = await resolvePromptTemplate(categoryId, categoryName, truncatedText);
 
-Summarise the letter in EXACTLY 100-130 words of plain English. Include an urgency classification at the end on its own line in this exact format: URGENCY: Routine|Important|Time-Sensitive
-
-Rules:
-- No more than 130 words, no fewer than 100 words
-- Plain English only — no jargon, no legal language
-- Be specific about what the letter says and what the recipient needs to know
-- Do NOT include professional advice
-- End with: URGENCY: [level]
-
-Document text:
-${truncatedText}`;
-
-        // ── 6. Retry logic with backoff (§8.1) ──
-        let lastError: Error | null = null;
-        let summary = "";
-        let urgency: string = "Routine";
-        let tokensIn = 0;
-        let tokensOut = 0;
-
+        // ── 6. Transition to FREE_SUMMARY_GENERATING ──
         await Job.findByIdAndUpdate(jobId, {
             status: JobState.FREE_SUMMARY_GENERATING,
             previous_state: job.status,
             state_transitioned_at: new Date(),
         });
+
+        // ── 7. Retry loop with backoff (§8.1) ──
+        let lastError: Error | null = null;
+        let summary  = "";
+        let urgency  = "Routine";
+        let tokensIn = 0;
+        let tokensOut = 0;
 
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             if (attempt > 0) {
@@ -163,17 +224,15 @@ ${truncatedText}`;
                 });
 
                 const rawOutput = completion.choices[0]?.message?.content ?? "";
-                tokensIn = completion.usage?.prompt_tokens ?? 0;
+                tokensIn  = completion.usage?.prompt_tokens ?? 0;
                 tokensOut = completion.usage?.completion_tokens ?? 0;
 
-                // ── 7. Parse urgency from output ──
-                const urgencyMatch = rawOutput.match(
-                    /URGENCY:\s*(Routine|Important|Time-Sensitive)/i,
-                );
+                // ── 8. Parse urgency from output ──
+                const urgencyMatch = rawOutput.match(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i);
                 urgency = urgencyMatch?.[1] ?? "Routine";
                 summary = rawOutput.replace(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i, "").trim();
 
-                // ── 8. Validate output (§8.1) ──
+                // ── 9. Validate output (§8.1) ──
                 if (!validateAIOutput(summary)) {
                     throw new Error(
                         `AI output failed validation on attempt ${attempt + 1}. Word count: ${countWords(summary)}`,
@@ -187,7 +246,6 @@ ${truncatedText}`;
                 break; // success
             } catch (err: any) {
                 lastError = err;
-                // Handle rate limits (§8.1)
                 if (err?.status === 429) {
                     const retryAfter = parseInt(err?.headers?.["retry-after"] ?? "5") * 1000;
                     await sleep(retryAfter);
@@ -196,7 +254,7 @@ ${truncatedText}`;
             }
         }
 
-        // ── 9. All retries exhausted ──
+        // ── 10. All retries exhausted ──
         if (lastError) {
             await Job.findByIdAndUpdate(jobId, {
                 status: JobState.FAILED,
@@ -209,22 +267,21 @@ ${truncatedText}`;
             );
         }
 
-        // ── 10. Log token usage & cost (§9.1) ──
-        const costEstimate = estimateCost(tokensIn, tokensOut);
+        // ── 11. Log token usage & cost (§9.1) ──
         await JobToken.create({
             job_id: jobId,
             prompt_type: "free",
             tokens_in: tokensIn,
             tokens_out: tokensOut,
-            cost_estimate: costEstimate,
+            cost_estimate: estimateCost(tokensIn, tokensOut),
             model: "gpt-4.1",
             attempt_number: 1,
         });
 
-        // ── 11. Increment monthly usage counter (§9.2) ──
+        // ── 12. Increment monthly usage counter (§9.2) ──
         await checkAndIncrementMonthlyUsage(tokensIn + tokensOut);
 
-        // ── 12. Transition job to FREE_SUMMARY_COMPLETE ──
+        // ── 13. Transition job to FREE_SUMMARY_COMPLETE ──
         await Job.findByIdAndUpdate(jobId, {
             status: JobState.FREE_SUMMARY_COMPLETE,
             previous_state: JobState.FREE_SUMMARY_GENERATING,

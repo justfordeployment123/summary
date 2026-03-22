@@ -15,7 +15,7 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        const { id } = params;
+        const { id } = await params;
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });
@@ -61,7 +61,7 @@ export async function PUT(
 ) {
     try {
         await connectDB();
-        const { id } = params;
+        const { id } = await params;
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });

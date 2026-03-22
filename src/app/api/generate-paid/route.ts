@@ -4,8 +4,9 @@
 // It must NEVER be called directly from client-side code (§7.2).
 // The webhook handler verifies payment before calling this function.
 //
-// Requirement constraints (§8, §9):
+// Requirement constraints (§8, §9, §10):
 //   • Payment lock: job must be in PAYMENT_CONFIRMED state
+//   • Category-specific paid prompt fetched from DB (§10.2) — falls back to hardcoded default
 //   • Token caps: configurable max input/output tokens (from Settings)
 //   • 1,200-word hard cap on input text
 //   • Semantic chunking for long documents
@@ -18,6 +19,7 @@ import OpenAI from "openai";
 import connectToDatabase from "@/lib/db";
 import { Job } from "@/models/Job";
 import { Setting } from "@/models/Setting";
+import { Prompt } from "@/models/Prompt";
 import { JobToken } from "@/models/JobToken";
 import { checkAndIncrementMonthlyUsage } from "@/lib/tokenBudget";
 
@@ -58,44 +60,87 @@ async function sleep(ms: number) {
     return new Promise((r) => setTimeout(r, ms));
 }
 
-// ─── Main exported function (called by webhook handler) ───────────────────────
+// ─── DB Prompt Lookup (§10.2) ─────────────────────────────────────────────────
+//
+// Priority order:
+//   1. Active category-specific paid prompt for this category
+//   2. Active generic paid prompt (no category_id)
+//   3. Hardcoded fallback (below)
+//
+// Placeholders replaced before sending:
+//   {{document_text}} → truncatedText
+//   {{category}}      → categoryName
+//   {{urgency}}       → job urgency from free summary stage
 
-export async function generatePaidBreakdown(jobId: string, extractedText: string, upsells: string[] = []): Promise<{ detailedBreakdown: string }> {
-    await connectToDatabase();
+async function resolvePromptTemplate(
+    categoryId: string | null,
+    categoryName: string,
+    documentText: string,
+    urgency: string,
+    upsellInstructions: string,
+): Promise<string> {
+    try {
+        // 1. Category-specific paid prompt
+        if (categoryId) {
+            const categoryPrompt = await Prompt.findOne({
+                category_id: categoryId,
+                type: "paid",
+                is_active: true,
+            })
+                .sort({ version: -1 })
+                .lean<{ prompt_text: string }>();
 
-    // ── 1. Re-validate job state (payment lock, §7.2) ──
-    const job = await Job.findById(jobId).populate("category_id").lean<any>();
-    if (!job) throw new Error("Job not found.");
-    if (job.status !== "PAYMENT_CONFIRMED") {
-        throw new Error(`Cannot generate paid breakdown — job in unexpected state: ${job.status}`);
+            if (categoryPrompt?.prompt_text) {
+                return hydratePlaceholders(categoryPrompt.prompt_text, {
+                    categoryName,
+                    documentText,
+                    urgency,
+                    upsellInstructions,
+                });
+            }
+        }
+
+        // 2. Generic paid prompt
+        const genericPrompt = await Prompt.findOne({
+            category_id: { $exists: false },
+            type: "paid",
+            is_active: true,
+        })
+            .sort({ version: -1 })
+            .lean<{ prompt_text: string }>();
+
+        if (genericPrompt?.prompt_text) {
+            return hydratePlaceholders(genericPrompt.prompt_text, {
+                categoryName,
+                documentText,
+                urgency,
+                upsellInstructions,
+            });
+        }
+    } catch (err) {
+        console.warn("[generate-paid] Failed to load prompt from DB, using fallback:", err);
     }
 
-    // ── 2. Check global monthly token cap (§9.2) ──
-    const capResult = await checkAndIncrementMonthlyUsage(0);
-    if (!capResult.allowed) {
-        // Keep job in PAYMENT_CONFIRMED — will need manual retry
-        throw new Error("Monthly token cap reached. Paid generation paused.");
-    }
+    // 3. Hardcoded fallback
+    return buildFallbackPrompt(categoryName, documentText, upsellInstructions);
+}
 
-    // ── 3. Fetch configurable settings ──
-    const [maxInputSetting, maxOutputSetting, wordCapSetting] = await Promise.all([
-        Setting.findOne({ key: "ai_max_input_tokens_paid" }).lean<any>(),
-        Setting.findOne({ key: "ai_max_output_tokens_paid" }).lean<any>(),
-        Setting.findOne({ key: "ai_input_word_cap" }).lean<any>(),
-    ]);
+function hydratePlaceholders(
+    template: string,
+    vars: { categoryName: string; documentText: string; urgency: string; upsellInstructions: string },
+): string {
+    return (
+        template
+            .replace(/\{\{document_text\}\}/g, vars.documentText)
+            .replace(/\{\{category\}\}/g, vars.categoryName)
+            .replace(/\{\{urgency\}\}/g, vars.urgency) +
+        // Append upsell instructions after the template if any
+        (vars.upsellInstructions ? `\n\n${vars.upsellInstructions}` : "")
+    );
+}
 
-    const maxOutputTokens: number = maxOutputSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
-    const wordCap: number = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
-
-    // ── 4. Enforce word cap on input (§9.1) ──
-    const truncatedText = truncateToWordCap(extractedText, wordCap);
-
-    // ── 5. Build prompt ──
-    const category = job.category_id as any;
-    const categoryName = category?.name ?? "General";
-    const upsellInstructions = buildUpsellInstructions(upsells);
-
-    const prompt = `You are an expert document analyst. Produce a detailed section-by-section breakdown of the following ${categoryName} letter.
+function buildFallbackPrompt(categoryName: string, documentText: string, upsellInstructions: string): string {
+    return `You are an expert document analyst. Produce a detailed section-by-section breakdown of the following ${categoryName} letter.
 
 Structure your breakdown as follows:
 1. **Overview** — What this letter is about (2-3 sentences)
@@ -113,7 +158,65 @@ Rules:
 - Be specific and actionable
 
 Document text:
-${truncatedText}`;
+${documentText}`;
+}
+
+// ─── Upsell instruction builder ───────────────────────────────────────────────
+
+function buildUpsellInstructions(upsells: string[]): string {
+    if (!upsells || upsells.length === 0) return "";
+    const instructions: string[] = [];
+    if (upsells.some((u) => u.toLowerCase().includes("legal"))) {
+        instructions.push("7. **Legal Formatting** — Format key legal clauses in a structured legal style with clear clause references.");
+    }
+    if (upsells.some((u) => u.toLowerCase().includes("tone"))) {
+        instructions.push("8. **Tone Rewrite** — Provide a suggested reply or response in a professional, clear tone.");
+    }
+    if (upsells.some((u) => u.toLowerCase().includes("detail"))) {
+        instructions.push("9. **Extended Detail** — Expand on each section with additional context and explanations.");
+    }
+    return instructions.join("\n");
+}
+
+// ─── Main exported function (called by webhook handler) ───────────────────────
+
+export async function generatePaidBreakdown(jobId: string, extractedText: string, upsells: string[] = []): Promise<{ detailedBreakdown: string }> {
+    await connectToDatabase();
+
+    // ── 1. Re-validate job state (payment lock, §7.2) ──
+    const job = await Job.findById(jobId).populate("category_id").lean<any>();
+    if (!job) throw new Error("Job not found.");
+    if (job.status !== "PAYMENT_CONFIRMED") {
+        throw new Error(`Cannot generate paid breakdown — job in unexpected state: ${job.status}`);
+    }
+
+    // ── 2. Check global monthly token cap (§9.2) ──
+    const capResult = await checkAndIncrementMonthlyUsage(0);
+    if (!capResult.allowed) {
+        throw new Error("Monthly token cap reached. Paid generation paused.");
+    }
+
+    // ── 3. Fetch configurable settings ──
+    const [maxOutputSetting, wordCapSetting] = await Promise.all([
+        Setting.findOne({ key: "ai_max_output_tokens_paid" }).lean<any>(),
+        Setting.findOne({ key: "ai_input_word_cap" }).lean<any>(),
+    ]);
+
+    const maxOutputTokens: number = maxOutputSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
+    const wordCap: number = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
+
+    // ── 4. Enforce word cap on input (§9.1) ──
+    const truncatedText = truncateToWordCap(extractedText, wordCap);
+
+    // ── 5. Resolve prompt from DB (§10.2), fall back to hardcoded if none ──
+    const category = job.category_id as any;
+    const categoryId = category?._id?.toString() ?? null;
+    const categoryName = category?.name ?? "General";
+    const urgency = job.urgency ?? "Routine";
+
+    const upsellInstructions = buildUpsellInstructions(upsells);
+
+    const prompt = await resolvePromptTemplate(categoryId, categoryName, truncatedText, urgency, upsellInstructions);
 
     // ── 6. Transition to PAID_BREAKDOWN_GENERATING ──
     await Job.findByIdAndUpdate(jobId, {
@@ -198,22 +301,4 @@ ${truncatedText}`;
     });
 
     return { detailedBreakdown };
-}
-
-// ─── Upsell instruction builder ───────────────────────────────────────────────
-
-function buildUpsellInstructions(upsells: string[]): string {
-    if (!upsells || upsells.length === 0) return "";
-    const instructions: string[] = [];
-    // In production these names come from DB — hardcoded slugs as fallback
-    if (upsells.some((u) => u.toLowerCase().includes("legal"))) {
-        instructions.push("7. **Legal Formatting** — Format key legal clauses in a structured legal style with clear clause references.");
-    }
-    if (upsells.some((u) => u.toLowerCase().includes("tone"))) {
-        instructions.push("8. **Tone Rewrite** — Provide a suggested reply or response in a professional, clear tone.");
-    }
-    if (upsells.some((u) => u.toLowerCase().includes("detail"))) {
-        instructions.push("9. **Extended Detail** — Expand on each section with additional context and explanations.");
-    }
-    return instructions.join("\n");
 }

@@ -62,13 +62,20 @@ export interface Upsell {
     createdAt: string;
 }
 
-// ── Prompt types ────────────────────────────────────────────────────────────
+// ── Prompt types ─────────────────────────────────────────────────────────────
+//
+// Per requirements §10.2, there are exactly two prompt types:
+//   "free"  — 100–130 word plain-English summary + urgency indicator
+//   "paid"  — full structured breakdown (key points, actions, deadlines, next steps)
+//
+// Upsells (More Detail, Legal Formatting, Tone Rewrite) are a separate system
+// managed via /admin/upsells — they are NOT prompt templates.
 
 export interface Prompt {
     id: string;
     categoryId: string | null;
     categoryName: string;
-    type: "free" | "paid" | "upsell";
+    type: "free" | "paid";
     promptText: string;
     version: number;
     isActive: boolean;
@@ -83,7 +90,7 @@ export interface PromptVersion {
 
 export interface CreatePromptPayload {
     categoryId?: string | null;
-    type: "free" | "paid" | "upsell";
+    type: "free" | "paid";
     promptText: string;
 }
 
@@ -93,10 +100,10 @@ export interface UpdatePromptPayload {
 
 export interface PatchPromptPayload {
     isActive?: boolean;
-    type?: "free" | "paid" | "upsell";
+    type?: "free" | "paid";
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const adminApi = {
     // --- AUTHENTICATION ---
@@ -256,9 +263,10 @@ export const adminApi = {
 
     /**
      * GET /api/admin/prompts
-     * Fetch all prompt templates, optionally filtered by type or category.
+     * Fetch all prompt templates. Optionally filter by type ("free" | "paid")
+     * or by categoryId. Results are enriched with the category name.
      */
-    async getPrompts(filters?: { type?: "free" | "paid" | "upsell"; categoryId?: string }): Promise<{ prompts: Prompt[] }> {
+    async getPrompts(filters?: { type?: "free" | "paid"; categoryId?: string }): Promise<{ prompts: Prompt[] }> {
         const params = new URLSearchParams();
         if (filters?.type) params.set("type", filters.type);
         if (filters?.categoryId) params.set("categoryId", filters.categoryId);
@@ -271,7 +279,7 @@ export const adminApi = {
 
     /**
      * GET /api/admin/prompts/[id]
-     * Fetch a single prompt by ID.
+     * Fetch a single prompt by its MongoDB ID.
      */
     async getPrompt(id: string): Promise<{ prompt: Prompt }> {
         const res = await fetch(`/api/admin/prompts/${id}`);
@@ -282,7 +290,9 @@ export const adminApi = {
 
     /**
      * POST /api/admin/prompts
-     * Create a new prompt template (starts at version 1).
+     * Create a new prompt template. Version starts at 1.
+     * - categoryId: null = generic fallback, a real ID = category-specific
+     * - type: "free" or "paid" only
      */
     async createPrompt(payload: CreatePromptPayload): Promise<{ prompt: Prompt }> {
         const res = await fetch("/api/admin/prompts", {
@@ -297,8 +307,8 @@ export const adminApi = {
 
     /**
      * PUT /api/admin/prompts/[id]
-     * Save updated prompt text — snapshots the current version and bumps
-     * the version counter. Returns { version, updatedAt }.
+     * Save new prompt text. Snapshots the current version to history and
+     * bumps the version counter. Returns { version, updatedAt }.
      */
     async updatePrompt(id: string, payload: UpdatePromptPayload): Promise<{ version: number; updatedAt: string }> {
         const res = await fetch(`/api/admin/prompts/${id}`, {
@@ -313,7 +323,8 @@ export const adminApi = {
 
     /**
      * PATCH /api/admin/prompts/[id]
-     * Toggle isActive or change type — does NOT bump the version.
+     * Update metadata only (isActive, type). Does NOT bump the version.
+     * Use PUT to change prompt text.
      */
     async patchPrompt(id: string, payload: PatchPromptPayload): Promise<Prompt> {
         const res = await fetch(`/api/admin/prompts/${id}`, {
@@ -339,8 +350,9 @@ export const adminApi = {
 
     /**
      * GET /api/admin/prompts/[id]/versions
-     * Returns the full version timeline for a prompt — current version first,
-     * then all archived snapshots in descending order.
+     * Returns the full version timeline — current version first (labelled "current"),
+     * then all archived snapshots newest-first. Use "Restore" to load an old
+     * version back into the editor (still requires a Save to apply it).
      */
     async getPromptVersions(id: string): Promise<{ versions: PromptVersion[] }> {
         const res = await fetch(`/api/admin/prompts/${id}/versions`);
