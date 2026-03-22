@@ -45,7 +45,7 @@ export interface DashboardStats {
 }
 
 export interface Category {
-    _id: string; // MongoDB uses _id
+    _id: string;
     name: string;
     slug: string;
     base_price: number;
@@ -58,9 +58,45 @@ export interface Upsell {
     name: string;
     description: string;
     is_active: boolean;
-    category_prices: Record<string, number>; // Object mapping Category ID to price
+    category_prices: Record<string, number>;
     createdAt: string;
 }
+
+// ── Prompt types ────────────────────────────────────────────────────────────
+
+export interface Prompt {
+    id: string;
+    categoryId: string | null;
+    categoryName: string;
+    type: "free" | "paid" | "upsell";
+    promptText: string;
+    version: number;
+    isActive: boolean;
+    updatedAt: string;
+}
+
+export interface PromptVersion {
+    version: number;
+    promptText: string;
+    updatedAt: string;
+}
+
+export interface CreatePromptPayload {
+    categoryId?: string | null;
+    type: "free" | "paid" | "upsell";
+    promptText: string;
+}
+
+export interface UpdatePromptPayload {
+    promptText: string;
+}
+
+export interface PatchPromptPayload {
+    isActive?: boolean;
+    type?: "free" | "paid" | "upsell";
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 export const adminApi = {
     // --- AUTHENTICATION ---
@@ -97,15 +133,6 @@ export const adminApi = {
         return data;
     },
 
-    // async regenerateJob(jobId: string): Promise<{ message: string }> {
-    //     const res = await fetch(`/api/admin/jobs/${jobId}/regenerate`, {
-    //         method: "POST",
-    //     });
-    //     const data = await res.json();
-    //     if (!res.ok) throw new Error(data.error || "Failed to regenerate job");
-    //     return data;
-    // },
-    
     async getCategories(): Promise<{ categories: Category[] }> {
         const res = await fetch("/api/admin/categories");
         const data = await res.json();
@@ -136,13 +163,12 @@ export const adminApi = {
     },
 
     async deleteCategory(id: string): Promise<{ success: boolean }> {
-        const res = await fetch(`/api/admin/categories/${id}`, {
-            method: "DELETE",
-        });
+        const res = await fetch(`/api/admin/categories/${id}`, { method: "DELETE" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to delete category");
         return data;
     },
+
     async getUpsells(): Promise<{ upsells: Upsell[] }> {
         const res = await fetch("/api/admin/upsells");
         const data = await res.json();
@@ -173,25 +199,22 @@ export const adminApi = {
     },
 
     async deleteUpsell(id: string): Promise<{ success: boolean }> {
-        const res = await fetch(`/api/admin/upsells/${id}`, {
-            method: "DELETE",
-        });
+        const res = await fetch(`/api/admin/upsells/${id}`, { method: "DELETE" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to delete upsell");
         return data;
     },
 
-
     // --- SETTINGS ---
 
-    async getSettings(): Promise<{ settings: Record<string, any> }> {
+    async getSettings(): Promise<{ settings: Record<string, unknown> }> {
         const res = await fetch("/api/admin/settings");
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to fetch settings");
         return data;
     },
 
-    async updateSetting(key: string, value: any): Promise<void> {
+    async updateSetting(key: string, value: unknown): Promise<void> {
         const res = await fetch("/api/admin/settings", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -201,15 +224,16 @@ export const adminApi = {
         if (!res.ok) throw new Error(data.error || "Failed to update setting");
     },
 
-    /// --- JOB DETAILS & ACTIONS ---
-    async getJobs(params: URLSearchParams): Promise<any> {
+    // --- JOB DETAILS & ACTIONS ---
+
+    async getJobs(params: URLSearchParams): Promise<unknown> {
         const res = await fetch(`/api/admin/jobs?${params.toString()}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to fetch jobs");
         return data;
     },
 
-    async getJobDetail(jobId: string): Promise<any> {
+    async getJobDetail(jobId: string): Promise<unknown> {
         const res = await fetch(`/api/admin/jobs/${jobId}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to fetch job detail");
@@ -226,5 +250,102 @@ export const adminApi = {
         const res = await fetch(`/api/admin/jobs/${jobId}/refund`, { method: "POST" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to issue refund");
-    }
+    },
+
+    // --- PROMPTS ---
+
+    /**
+     * GET /api/admin/prompts
+     * Fetch all prompt templates, optionally filtered by type or category.
+     */
+    async getPrompts(filters?: { type?: "free" | "paid" | "upsell"; categoryId?: string }): Promise<{ prompts: Prompt[] }> {
+        const params = new URLSearchParams();
+        if (filters?.type) params.set("type", filters.type);
+        if (filters?.categoryId) params.set("categoryId", filters.categoryId);
+        const qs = params.toString() ? `?${params.toString()}` : "";
+        const res = await fetch(`/api/admin/prompts${qs}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to fetch prompts");
+        return data;
+    },
+
+    /**
+     * GET /api/admin/prompts/[id]
+     * Fetch a single prompt by ID.
+     */
+    async getPrompt(id: string): Promise<{ prompt: Prompt }> {
+        const res = await fetch(`/api/admin/prompts/${id}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to fetch prompt");
+        return data;
+    },
+
+    /**
+     * POST /api/admin/prompts
+     * Create a new prompt template (starts at version 1).
+     */
+    async createPrompt(payload: CreatePromptPayload): Promise<{ prompt: Prompt }> {
+        const res = await fetch("/api/admin/prompts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to create prompt");
+        return data;
+    },
+
+    /**
+     * PUT /api/admin/prompts/[id]
+     * Save updated prompt text — snapshots the current version and bumps
+     * the version counter. Returns { version, updatedAt }.
+     */
+    async updatePrompt(id: string, payload: UpdatePromptPayload): Promise<{ version: number; updatedAt: string }> {
+        const res = await fetch(`/api/admin/prompts/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to update prompt");
+        return data;
+    },
+
+    /**
+     * PATCH /api/admin/prompts/[id]
+     * Toggle isActive or change type — does NOT bump the version.
+     */
+    async patchPrompt(id: string, payload: PatchPromptPayload): Promise<Prompt> {
+        const res = await fetch(`/api/admin/prompts/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to patch prompt");
+        return data;
+    },
+
+    /**
+     * DELETE /api/admin/prompts/[id]
+     * Hard-deletes the prompt and all its version history.
+     */
+    async deletePrompt(id: string): Promise<{ success: boolean }> {
+        const res = await fetch(`/api/admin/prompts/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to delete prompt");
+        return data;
+    },
+
+    /**
+     * GET /api/admin/prompts/[id]/versions
+     * Returns the full version timeline for a prompt — current version first,
+     * then all archived snapshots in descending order.
+     */
+    async getPromptVersions(id: string): Promise<{ versions: PromptVersion[] }> {
+        const res = await fetch(`/api/admin/prompts/${id}/versions`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to fetch prompt versions");
+        return data;
+    },
 };
