@@ -12,11 +12,11 @@ import mongoose from "mongoose";
 // ─────────────────────────────────────────────────────────────
 export async function GET(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> } // ✅ Updated Type here
 ) {
     try {
         await connectDB();
-        const { id } = await params;
+        const { id } = await params; // ✅ Awaited
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });

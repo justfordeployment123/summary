@@ -9,10 +9,7 @@ import mongoose from "mongoose";
 // GET /api/admin/prompts/[id]
 // Returns a single prompt with category name
 // ─────────────────────────────────────────────────────────────
-export async function GET(
-    req: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         await connectDB();
         const { id } = await params;
@@ -28,7 +25,7 @@ export async function GET(
 
         let categoryName = "Generic";
         if (prompt.category_id) {
-            const cat = await Category.findById(prompt.category_id).select("name").lean() as { name: string } | null;
+            const cat = (await Category.findById(prompt.category_id).select("name").lean()) as { name: string } | null;
             categoryName = cat?.name ?? "Unknown Category";
         }
 
@@ -55,13 +52,10 @@ export async function GET(
 // Updates prompt text → snapshots current version → bumps counter.
 // Per requirements: "Prompt versioning: previous versions retained for rollback."
 // ─────────────────────────────────────────────────────────────
-export async function PUT(
-    req: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         await connectDB();
-        const { id } = await params;
+        const { id } = await params; 
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });
@@ -111,11 +105,11 @@ export async function PUT(
 // ─────────────────────────────────────────────────────────────
 export async function PATCH(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }, // ✅ Updated Type
 ) {
     try {
         await connectDB();
-        const { id } = params;
+        const { id } = await params; // ✅ Awaited (was previously synchronous)
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });
@@ -133,11 +127,7 @@ export async function PATCH(
 
         allowedFields.updated_at = new Date();
 
-        const updated = await Prompt.findByIdAndUpdate(
-            id,
-            { $set: allowedFields },
-            { new: true, runValidators: true }
-        ).lean();
+        const updated = await Prompt.findByIdAndUpdate(id, { $set: allowedFields }, { new: true, runValidators: true }).lean();
 
         if (!updated) {
             return NextResponse.json({ error: "Prompt not found." }, { status: 404 });
@@ -162,11 +152,11 @@ export async function PATCH(
 // ─────────────────────────────────────────────────────────────
 export async function DELETE(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }, // ✅ Updated Type
 ) {
     try {
         await connectDB();
-        const { id } = params;
+        const { id } = await params; // ✅ Awaited (was previously synchronous)
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });
