@@ -14,14 +14,11 @@ import { JobPayment } from "@/models/JobPayment";
 import { Setting } from "@/models/Setting";
 import { RegenerationLog } from "@/models/RegenerationLog";
 import Temp from "@/models/Temp";
-import { generatePaidBreakdown } from "@/app/api/generate-paid/route";
+import { generatePaidBreakdown } from "@/app/api/generate-paid/paidService";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 
-export async function POST(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> },
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         await dbConnect();
         const { id } = await params;
@@ -40,19 +37,13 @@ export async function POST(
 
         // ── 3. Must be FAILED ──
         if (job.status !== "FAILED") {
-            return NextResponse.json(
-                { error: `Regenerate is only available for FAILED jobs. Current status: ${job.status}` },
-                { status: 409 },
-            );
+            return NextResponse.json({ error: `Regenerate is only available for FAILED jobs. Current status: ${job.status}` }, { status: 409 });
         }
 
         // ── 4. Must have confirmed payment ──
         const payment = await JobPayment.findOne({ job_id: id, status: "completed" }).lean<any>();
         if (!payment && !job.stripe_payment_intent_id) {
-            return NextResponse.json(
-                { error: "Cannot regenerate — no confirmed payment on record for this job." },
-                { status: 403 },
-            );
+            return NextResponse.json({ error: "Cannot regenerate — no confirmed payment on record for this job." }, { status: 403 });
         }
 
         // ── 5. Check max regeneration attempts ──
@@ -74,11 +65,11 @@ export async function POST(
 
         // ── 6. Log the attempt BEFORE triggering (so it's always recorded) ──
         const logEntry = await RegenerationLog.create({
-            job_id:                id,
+            job_id: id,
             triggered_by_admin_id: adminId,
-            attempt_number:        attemptNumber,
-            status:                "triggered",
-            created_at:            new Date(),
+            attempt_number: attemptNumber,
+            status: "triggered",
+            created_at: new Date(),
         });
 
         // ── 7. Recover extracted text from Temp collection ──
@@ -98,8 +89,8 @@ export async function POST(
 
         // ── 8. Reset job to PAYMENT_CONFIRMED so generatePaidBreakdown accepts it ──
         await Job.findByIdAndUpdate(id, {
-            status:                "PAYMENT_CONFIRMED",
-            previous_state:        "FAILED",
+            status: "PAYMENT_CONFIRMED",
+            previous_state: "FAILED",
             state_transitioned_at: new Date(),
         });
 
@@ -113,34 +104,25 @@ export async function POST(
             await RegenerationLog.findByIdAndUpdate(logEntry._id, { status: "completed" });
 
             return NextResponse.json({
-                success:       true,
+                success: true,
                 attemptNumber,
-                attemptsLeft:  maxAttempts - attemptNumber,
+                attemptsLeft: maxAttempts - attemptNumber,
             });
         } catch (genError: any) {
             // generatePaidBreakdown sets job status to FAILED on error — log it
             await RegenerationLog.findByIdAndUpdate(logEntry._id, { status: "failed" });
 
-            return NextResponse.json(
-                { error: `Regeneration failed: ${genError.message}` },
-                { status: 502 },
-            );
+            return NextResponse.json({ error: `Regeneration failed: ${genError.message}` }, { status: 502 });
         }
     } catch (error: any) {
         console.error("[regenerate]", error);
-        return NextResponse.json(
-            { error: error.message || "Failed to trigger regeneration." },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: error.message || "Failed to trigger regeneration." }, { status: 500 });
     }
 }
 
 // ── GET — fetch regeneration history for a job ────────────────────────────────
 
-export async function GET(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         await dbConnect();
         const { id } = await params;
@@ -148,21 +130,19 @@ export async function GET(
         const maxAttemptSetting = await Setting.findOne({ key: "max_regeneration_attempts" }).lean<{ value: number }>();
         const maxAttempts = maxAttemptSetting?.value ?? DEFAULT_MAX_ATTEMPTS;
 
-        const logs = await RegenerationLog.find({ job_id: id })
-            .sort({ created_at: -1 })
-            .lean<any[]>();
+        const logs = await RegenerationLog.find({ job_id: id }).sort({ created_at: -1 }).lean<any[]>();
 
         return NextResponse.json({
             logs: logs.map((l) => ({
-                id:                  l._id.toString(),
-                attemptNumber:       l.attempt_number,
-                triggeredBy:         l.triggered_by_admin_id,
-                status:              l.status,
-                createdAt:           l.created_at,
+                id: l._id.toString(),
+                attemptNumber: l.attempt_number,
+                triggeredBy: l.triggered_by_admin_id,
+                status: l.status,
+                createdAt: l.created_at,
             })),
             totalAttempts: logs.length,
             maxAttempts,
-            attemptsLeft:  Math.max(0, maxAttempts - logs.length),
+            attemptsLeft: Math.max(0, maxAttempts - logs.length),
         });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

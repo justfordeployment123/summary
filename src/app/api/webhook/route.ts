@@ -23,7 +23,7 @@ import { JobState } from "@/types/job";
 import WebhookEvent from "@/models/WebhookEvent";
 import { JobPayment } from "@/models/JobPayment";
 import Temp from "@/models/Temp";
-import { generatePaidBreakdown } from "@/app/api/generate-paid/route";
+import { generatePaidBreakdown } from "@/app/api/generate-paid/paidService";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -43,10 +43,7 @@ export async function POST(req: Request) {
         event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
     } catch (err: any) {
         console.error("[webhook] Invalid signature:", err.message);
-        return NextResponse.json(
-            { error: `Webhook signature verification failed: ${err.message}` },
-            { status: 400 },
-        );
+        return NextResponse.json({ error: `Webhook signature verification failed: ${err.message}` }, { status: 400 });
     }
 
     await dbConnect();
@@ -262,10 +259,7 @@ async function confirmAndGenerate({
             previous_state: JobState.PAYMENT_CONFIRMED,
             state_transitioned_at: new Date(),
         });
-        await JobPayment.findOneAndUpdate(
-            { job_id: jobId, stripe_payment_intent_id: paymentIntentId },
-            { $set: { status: "failed" } },
-        );
+        await JobPayment.findOneAndUpdate({ job_id: jobId, stripe_payment_intent_id: paymentIntentId }, { $set: { status: "failed" } });
         return;
     }
 
@@ -279,9 +273,6 @@ async function confirmAndGenerate({
     } catch (error: any) {
         console.error(`[webhook] Paid generation failed for job ${jobId}:`, error.message);
         // generatePaidBreakdown already set status to FAILED — just update payment record
-        await JobPayment.findOneAndUpdate(
-            { job_id: jobId, stripe_payment_intent_id: paymentIntentId },
-            { $set: { status: "failed" } },
-        );
+        await JobPayment.findOneAndUpdate({ job_id: jobId, stripe_payment_intent_id: paymentIntentId }, { $set: { status: "failed" } });
     }
 }
