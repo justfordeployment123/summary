@@ -76,6 +76,7 @@ export async function GET(request: Request) {
         }));
 
         // 6. Recent Jobs (Last 10)
+        Category.init();
         // Add .populate() to automatically fetch the linked Category data
         const recentJobsRaw = await Job.find()
             .sort({ created_at: -1 })

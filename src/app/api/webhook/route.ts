@@ -13,6 +13,11 @@
 //   2. Embedded Elements (new):    payment_intent.succeeded    → metadata on intent
 //
 // Extracted text is read from the Temp collection (24-hr TTL), not from the Job doc.
+//
+// FIX: JobPayment record is now created in confirmAndGenerate() after the atomic
+// state update. Previously the webhook updated Job.stripe_payment_intent_id but
+// never inserted a row into the job_payments collection, so the admin revenue
+// dashboard and per-job payment detail had no data.
 
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
@@ -20,6 +25,7 @@ import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
 import { JobState } from "@/types/job";
 import WebhookEvent from "@/models/WebhookEvent";
+import { JobPayment } from "@/models/JobPayment";
 import Temp from "@/models/Temp";
 import { generatePaidBreakdown } from "@/app/api/generate-paid/route";
 
@@ -43,10 +49,7 @@ export async function POST(req: Request) {
         event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
     } catch (err: any) {
         console.error("[webhook] Invalid signature:", err.message);
-        return NextResponse.json(
-            { error: `Webhook signature verification failed: ${err.message}` },
-            { status: 400 },
-        );
+        return NextResponse.json({ error: `Webhook signature verification failed: ${err.message}` }, { status: 400 });
     }
 
     await dbConnect();
@@ -74,12 +77,10 @@ export async function POST(req: Request) {
     try {
         switch (event.type) {
             case "checkout.session.completed":
-                // ── Legacy hosted Checkout flow ──
                 await handleCheckoutCompleted(event);
                 break;
 
             case "payment_intent.succeeded":
-                // ── Embedded Elements flow ──
                 // Only process if the intent has our metadata (jobId + accessToken).
                 // Intents created by a Checkout Session also fire this event — we skip
                 // those here because checkout.session.completed already handles them.
@@ -87,12 +88,11 @@ export async function POST(req: Request) {
                 break;
 
             default:
-                // Acknowledge all other event types without processing
                 console.log(`[webhook] Unhandled event type: ${event.type}`);
         }
     } catch (error: any) {
         console.error(`[webhook] Handler error for ${event.type}:`, error.message);
-        // Return 500 so Stripe retries — idempotency guard above prevents duplicate processing
+        // Return 500 so Stripe retries — idempotency guard above prevents double-processing
         return NextResponse.json({ error: "Internal handler error." }, { status: 500 });
     }
 
@@ -113,7 +113,6 @@ function extractMetadata(metadata: Stripe.Metadata | null): {
         jobId: metadata.jobId ?? null,
         accessToken: metadata.accessToken ?? null,
         upsells: JSON.parse(metadata.upsells ?? "[]"),
-        // Checkout sessions set this flag so payment_intent.succeeded knows to skip
         fromCheckoutSession: metadata.fromCheckoutSession === "true",
     };
 }
@@ -129,8 +128,7 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
         return;
     }
 
-    // Tag the PaymentIntent so the payment_intent.succeeded handler knows to skip it
-    // (avoids double-processing when both events fire for a Checkout Session)
+    // Tag the PaymentIntent so payment_intent.succeeded knows to skip it
     if (session.payment_intent) {
         await stripe.paymentIntents.update(String(session.payment_intent), {
             metadata: { fromCheckoutSession: "true" },
@@ -143,7 +141,11 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
         jobId,
         accessToken,
         upsells,
+        stripeSessionId: session.id,
         paymentIntentId: String(session.payment_intent ?? ""),
+        // Amount is in pence/cents — convert to pounds/dollars for storage
+        amountTotal: session.amount_total ?? 0,
+        currency: session.currency ?? "gbp",
         eventId: event.id,
     });
 }
@@ -154,15 +156,13 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
     const intent = event.data.object as Stripe.PaymentIntent;
     const { jobId, accessToken, upsells, fromCheckoutSession } = extractMetadata(intent.metadata);
 
-    // Skip intents that belong to a Checkout Session — they're handled by
-    // handleCheckoutCompleted above to prevent double AI generation.
+    // Skip intents that belong to a Checkout Session
     if (fromCheckoutSession) {
         console.log(`[webhook] payment_intent.succeeded ${intent.id} — belongs to Checkout Session, skipping.`);
         return;
     }
 
     if (!jobId || !accessToken) {
-        // This intent wasn't created by us (e.g. Stripe dashboard test) — ignore silently
         console.log(`[webhook] payment_intent.succeeded ${intent.id} — no jobId metadata, skipping.`);
         return;
     }
@@ -173,18 +173,24 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
         jobId,
         accessToken,
         upsells,
+        stripeSessionId: "", // No session ID in the Elements flow
         paymentIntentId: intent.id,
+        amountTotal: intent.amount ?? 0,
+        currency: intent.currency ?? "gbp",
         eventId: event.id,
     });
 }
 
-// ─── Shared: state transition + AI trigger ────────────────────────────────────
+// ─── Shared: state transition + JobPayment creation + AI trigger ──────────────
 
 interface ConfirmAndGenerateParams {
     jobId: string;
     accessToken: string;
     upsells: string[];
+    stripeSessionId: string;
     paymentIntentId: string;
+    amountTotal: number; // in smallest currency unit (pence/cents)
+    currency: string;
     eventId: string;
 }
 
@@ -192,7 +198,10 @@ async function confirmAndGenerate({
     jobId,
     accessToken,
     upsells,
+    stripeSessionId,
     paymentIntentId,
+    amountTotal,
+    currency,
     eventId,
 }: ConfirmAndGenerateParams) {
     // ── 4. Payment lock check (§7.2) ──
@@ -208,35 +217,57 @@ async function confirmAndGenerate({
     }
 
     if (job.status !== JobState.AWAITING_PAYMENT) {
-        console.warn(
-            `[webhook] Job ${jobId} is in '${job.status}' — not AWAITING_PAYMENT. Discarding event ${eventId}.`,
-        );
+        console.warn(`[webhook] Job ${jobId} is in '${job.status}' — not AWAITING_PAYMENT. Discarding event ${eventId}.`);
         return;
     }
 
     // ── 5. Atomic state update: AWAITING_PAYMENT → PAYMENT_CONFIRMED (§7.1) ──
-    // The findOneAndUpdate with the status condition acts as the database-level
-    // payment lock — prevents a race between two concurrent webhook deliveries.
+    // findOneAndUpdate with the status condition acts as the DB-level payment lock —
+    // prevents a race between two concurrent webhook deliveries.
     const updated = await Job.findOneAndUpdate(
         {
             _id: jobId,
-            status: JobState.AWAITING_PAYMENT, // atomic check
+            status: JobState.AWAITING_PAYMENT, // atomic guard
         },
         {
             status: JobState.PAYMENT_CONFIRMED,
             previous_state: JobState.AWAITING_PAYMENT,
             state_transitioned_at: new Date(),
             stripe_payment_intent_id: paymentIntentId,
+            upsells_purchased: upsells,
         },
         { new: true },
     );
 
     if (!updated) {
+        // Another concurrent webhook delivery already advanced the state
         console.warn(`[webhook] Job ${jobId} state update race detected — skipping (event: ${eventId}).`);
         return;
     }
 
-    // ── 6. Read extracted text from Temp collection (24-hr TTL, §4.3) ──
+    // ── 6. Record payment in JobPayment collection ──
+    // This was missing — without this, the admin revenue dashboard and
+    // per-job payment detail panel have no data to display.
+    try {
+        await JobPayment.create({
+            job_id: jobId,
+            stripe_session_id: stripeSessionId,
+            stripe_payment_intent_id: paymentIntentId,
+            // Store in smallest unit (pence/cents) to match Stripe convention,
+            // then divide by 100 for display in the admin panel.
+            amount: amountTotal,
+            currency: currency.toLowerCase(),
+            status: "completed",
+            upsells_purchased: upsells,
+        });
+    } catch (paymentRecordError: any) {
+        // Non-fatal: log but don't block AI generation. The job state is already
+        // PAYMENT_CONFIRMED so the user won't be double-charged. An admin can
+        // cross-reference the Stripe dashboard for payment details if needed.
+        console.error(`[webhook] Failed to create JobPayment record for job ${jobId}:`, paymentRecordError.message);
+    }
+
+    // ── 7. Read extracted text from Temp collection (24-hr TTL, §4.3) ──
     const tempDoc = await Temp.findOne({ job_id: String(jobId) }).lean<any>();
 
     if (!tempDoc?.extracted_text) {
@@ -246,16 +277,20 @@ async function confirmAndGenerate({
             previous_state: JobState.PAYMENT_CONFIRMED,
             state_transitioned_at: new Date(),
         });
+        // Update the JobPayment record to reflect the failure
+        await JobPayment.findOneAndUpdate({ job_id: jobId, stripe_payment_intent_id: paymentIntentId }, { status: "failed" });
         return;
     }
 
-    // ── 7. Trigger paid AI generation (webhook-only trigger, §7.2) ──
+    // ── 8. Trigger paid AI generation (webhook-only trigger, §7.2) ──
     try {
         await generatePaidBreakdown(jobId, tempDoc.extracted_text, upsells);
         // Clean up Temp document after successful paid generation
         await Temp.deleteOne({ job_id: String(jobId) });
     } catch (error: any) {
         console.error(`[webhook] Paid generation failed for ${jobId}:`, error.message);
-        // generatePaidBreakdown already sets status to FAILED on error — no need to set here
+        // generatePaidBreakdown already sets status to FAILED on error.
+        // Update payment record to surface the issue in admin dashboard.
+        await JobPayment.findOneAndUpdate({ job_id: jobId, stripe_payment_intent_id: paymentIntentId }, { status: "failed" });
     }
 }
