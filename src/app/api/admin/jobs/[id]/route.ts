@@ -6,18 +6,22 @@ import { Job } from "@/models/Job";
 import { JobPayment } from "@/models/JobPayment";
 import { JobStateLog } from "@/models/JobStateLog";
 import { JobToken } from "@/models/JobToken";
+import { RegenerationLog } from "@/models/RegenerationLog";
+import { Setting } from "@/models/Setting";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         await dbConnect();
         const { id } = await params;
 
-        const [job, payment, stateLogs, tokenLogs] = await Promise.all([
+        const [job, payment, stateLogs, tokenLogs, regenLogs, maxAttemptSetting] = await Promise.all([
             // Populate category name + upsell names in one shot
             Job.findById(id).populate("category_id", "name").lean<any>(),
             JobPayment.findOne({ job_id: id }).lean<any>(),
             JobStateLog.find({ job_id: id }).sort({ created_at: 1 }).lean<any[]>(),
             JobToken.find({ job_id: id }).sort({ created_at: -1 }).lean<any[]>(),
+            RegenerationLog.find({ job_id: id }).sort({ created_at: -1 }).lean<any[]>(),
+            Setting.findOne({ key: "max_regeneration_attempts" }).lean<{ value: number }>(),
         ]);
 
         if (!job) {
@@ -86,6 +90,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                 attemptNumber: log.attempt_number,
                 createdAt: log.created_at,
             })),
+
+            regenerationLog: regenLogs.map((log) => ({
+                id: log._id.toString(),
+                attemptNumber: log.attempt_number,
+                triggeredBy: log.triggered_by_admin_id,
+                status: log.status,
+                createdAt: log.created_at,
+            })),
+            regenerationAttemptsUsed: regenLogs.length,
+            regenerationMaxAttempts: maxAttemptSetting?.value ?? 3,
+            canRegenerate: job.status === "FAILED" && regenLogs.length < (maxAttemptSetting?.value ?? 3),
         };
 
         return NextResponse.json(jobDetail);

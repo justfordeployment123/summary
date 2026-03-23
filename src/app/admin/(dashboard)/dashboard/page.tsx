@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { adminApi, DashboardStats } from "@/lib/adminApi";
 
 // ─── Status badge styles ──────────────────────────────────────────────────────
@@ -18,7 +19,6 @@ const STATUS_BADGE: Record<string, string> = {
     REFUNDED: "bg-slate-100 text-slate-500 ring-slate-200",
 };
 
-// ─── Stat card icons ──────────────────────────────────────────────────────────
 function StatIcon({ type }: { type: "jobs" | "completed" | "pending" | "failed" }) {
     const base = "w-4 h-4";
     if (type === "jobs")
@@ -50,7 +50,6 @@ function StatIcon({ type }: { type: "jobs" | "completed" | "pending" | "failed" 
     );
 }
 
-// ─── Mini refresh indicator ───────────────────────────────────────────────────
 function RefreshButton({ onClick, spinning }: { onClick: () => void; spinning: boolean }) {
     return (
         <button
@@ -75,12 +74,17 @@ function RefreshButton({ onClick, spinning }: { onClick: () => void; spinning: b
     );
 }
 
-// ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function AdminDashboard() {
+    const router = useRouter();
+
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
+
+    // Per-job regenerate state: jobId → "idle" | "loading" | "success" | "error" | "limit"
+    const [regenState, setRegenState] = useState<Record<string, "idle" | "loading" | "success" | "error" | "limit">>({});
+    const [regenMsg, setRegenMsg] = useState<Record<string, string>>({});
 
     useEffect(() => {
         fetchStats();
@@ -94,8 +98,8 @@ export default function AdminDashboard() {
             const data = await adminApi.getDashboardStats();
             setStats(data);
             setError("");
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to load stats");
         } finally {
             setIsLoading(false);
             setRefreshing(false);
@@ -103,12 +107,23 @@ export default function AdminDashboard() {
     }
 
     async function regenerateJob(jobId: string) {
-        if (!confirm("Regenerate breakdown for this job?")) return;
+        if (!confirm("Re-trigger the paid AI breakdown for this failed job? This will use OpenAI tokens.")) return;
+
+        setRegenState((s) => ({ ...s, [jobId]: "loading" }));
+        setRegenMsg((s) => ({ ...s, [jobId]: "" }));
+
         try {
             await adminApi.regenerateJob(jobId);
-            fetchStats();
-        } catch (err: any) {
-            alert(`Failed: ${err.message}`);
+            setRegenState((s) => ({ ...s, [jobId]: "success" }));
+            setRegenMsg((s) => ({ ...s, [jobId]: "Regeneration triggered successfully." }));
+            // Refresh stats so the job status updates
+            setTimeout(() => fetchStats(), 2000);
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Failed to regenerate";
+            // Detect attempt limit error
+            const isLimit = msg.toLowerCase().includes("maximum") || msg.includes("429");
+            setRegenState((s) => ({ ...s, [jobId]: isLimit ? "limit" : "error" }));
+            setRegenMsg((s) => ({ ...s, [jobId]: msg }));
         }
     }
 
@@ -140,12 +155,11 @@ export default function AdminDashboard() {
     if (!stats) return null;
 
     const capPercent = stats.tokenCapMonth > 0 ? Math.min(Math.round((stats.tokenUsageMonth / stats.tokenCapMonth) * 100), 100) : 0;
-
     const capBarColor = capPercent >= 100 ? "bg-red-500" : capPercent >= 80 ? "bg-amber-400" : "bg-teal-500";
 
     return (
         <div className="p-8 space-y-7">
-            {/* ── Page header ── */}
+            {/* Page header */}
             <div className="flex items-end justify-between">
                 <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-teal-600 mb-1">Overview</p>
@@ -155,7 +169,7 @@ export default function AdminDashboard() {
                 <RefreshButton onClick={() => fetchStats(true)} spinning={refreshing} />
             </div>
 
-            {/* ── Alerts ── */}
+            {/* Alerts */}
             {(stats.capWarning || stats.stuckJobs?.length > 0) && (
                 <div className="space-y-3">
                     {stats.capWarning && (
@@ -177,7 +191,6 @@ export default function AdminDashboard() {
                             </div>
                         </div>
                     )}
-
                     {stats.stuckJobs?.length > 0 && (
                         <div className="bg-red-50 border border-red-200/80 rounded-2xl px-5 py-4">
                             <div className="flex items-center gap-2 mb-3">
@@ -204,7 +217,7 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {/* ── Stat cards ── */}
+            {/* Stat cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
                     {
@@ -250,9 +263,8 @@ export default function AdminDashboard() {
                 ))}
             </div>
 
-            {/* ── Revenue + Token usage ── */}
+            {/* Revenue + Token usage */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Revenue */}
                 <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
                     <div className="flex items-center gap-2 mb-5">
                         <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
@@ -281,7 +293,6 @@ export default function AdminDashboard() {
                     </div>
                 </div>
 
-                {/* Token usage */}
                 <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
                     <div className="flex items-center gap-2 mb-5">
                         <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
@@ -295,19 +306,12 @@ export default function AdminDashboard() {
                         </div>
                         <h3 className="text-sm font-bold text-slate-800">Monthly OpenAI Usage</h3>
                         <span
-                            className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${
-                                capPercent >= 100
-                                    ? "bg-red-100 text-red-700"
-                                    : capPercent >= 80
-                                      ? "bg-amber-100 text-amber-700"
-                                      : "bg-slate-100 text-slate-600"
-                            }`}
+                            className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${capPercent >= 100 ? "bg-red-100 text-red-700" : capPercent >= 80 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}
                         >
                             {capPercent}%
                         </span>
                     </div>
                     <div className="space-y-3">
-                        {/* Progress bar */}
                         <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                             <div className={`h-full rounded-full transition-all duration-700 ${capBarColor}`} style={{ width: `${capPercent}%` }} />
                         </div>
@@ -320,7 +324,7 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            {/* ── Recent jobs table ── */}
+            {/* Recent jobs table */}
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -331,22 +335,22 @@ export default function AdminDashboard() {
                             </span>
                         )}
                     </div>
-                    <a
-                        href="/admin/jobs"
+                    <button
+                        onClick={() => router.push("/admin/jobs")}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-teal-600 hover:text-teal-700 transition-colors"
                     >
                         View all
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                         </svg>
-                    </a>
+                    </button>
                 </div>
 
                 <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                         <thead>
                             <tr className="border-b border-slate-100">
-                                {["Reference", "Category", "Email", "Status", "Urgency", "Amount", "Created", ""].map((h, i) => (
+                                {["Reference", "Category", "Email", "Status", "Urgency", "Amount", "Created", "Actions"].map((h, i) => (
                                     <th key={i} className="text-left px-5 py-3 text-[11px] font-bold uppercase tracking-[0.09em] text-slate-400">
                                         {h}
                                     </th>
@@ -378,45 +382,90 @@ export default function AdminDashboard() {
                                     </td>
                                 </tr>
                             ) : (
-                                stats.recentJobs.map((job) => (
-                                    <tr key={job.jobId} className="hover:bg-slate-50/60 transition-colors group">
-                                        <td className="px-5 py-3.5 font-mono font-semibold text-slate-700">{job.referenceId}</td>
-                                        <td className="px-5 py-3.5 text-slate-600">{job.category}</td>
-                                        <td className="px-5 py-3.5 text-slate-400 max-w-40 truncate">{job.email}</td>
-                                        <td className="px-5 py-3.5">
-                                            <span
-                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ring-1 ${STATUS_BADGE[job.status] ?? "bg-slate-100 text-slate-500 ring-slate-200"}`}
-                                            >
-                                                {job.status.replace(/_/g, " ")}
-                                            </span>
-                                        </td>
-                                        <td className="px-5 py-3.5 text-slate-500">{job.urgency || "—"}</td>
-                                        <td className="px-5 py-3.5 font-semibold text-slate-700 tabular-nums">
-                                            {job.amount ? `£${(job.amount / 100).toFixed(2)}` : "—"}
-                                        </td>
-                                        <td className="px-5 py-3.5 text-slate-400 tabular-nums">
-                                            {new Date(job.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                                        </td>
-                                        <td className="px-5 py-3.5">
-                                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <a
-                                                    href={`/admin/jobs?id=${job.jobId}`}
-                                                    className="text-teal-600 hover:text-teal-800 font-semibold hover:bg-teal-50 px-2 py-1 rounded-lg transition-all"
+                                stats.recentJobs.map((job) => {
+                                    const rs = regenState[job.jobId] ?? "idle";
+                                    return (
+                                        <tr key={job.jobId} className="hover:bg-slate-50/60 transition-colors group">
+                                            <td className="px-5 py-3.5 font-mono font-semibold text-slate-700">{job.referenceId}</td>
+                                            <td className="px-5 py-3.5 text-slate-600">{job.category}</td>
+                                            <td className="px-5 py-3.5 text-slate-400 max-w-40 truncate">{job.email}</td>
+                                            <td className="px-5 py-3.5">
+                                                <span
+                                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ring-1 ${STATUS_BADGE[job.status] ?? "bg-slate-100 text-slate-500 ring-slate-200"}`}
                                                 >
-                                                    View
-                                                </a>
-                                                {job.status === "FAILED" && (
+                                                    {job.status.replace(/_/g, " ")}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-slate-500">{job.urgency || "—"}</td>
+                                            <td className="px-5 py-3.5 font-semibold text-slate-700 tabular-nums">
+                                                {job.amount ? `£${(job.amount / 100).toFixed(2)}` : "—"}
+                                            </td>
+                                            <td className="px-5 py-3.5 text-slate-400 tabular-nums">
+                                                {new Date(job.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                                            </td>
+                                            <td className="px-5 py-3.5">
+                                                <div className="flex items-center gap-2">
+                                                    {/* View — always visible */}
                                                     <button
-                                                        onClick={() => regenerateJob(job.jobId)}
-                                                        className="text-amber-600 hover:text-amber-800 font-semibold hover:bg-amber-50 px-2 py-1 rounded-lg transition-all"
+                                                        onClick={() => router.push(`/admin/jobs/${job.jobId}`)}
+                                                        className="text-teal-600 hover:text-teal-800 font-semibold hover:bg-teal-50 px-2 py-1 rounded-lg transition-all text-xs"
                                                     >
-                                                        Retry
+                                                        View
                                                     </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
+
+                                                    {/* Regenerate — only for FAILED jobs */}
+                                                    {job.status === "FAILED" && (
+                                                        <div className="flex flex-col items-start gap-0.5">
+                                                            <button
+                                                                onClick={() => regenerateJob(job.jobId)}
+                                                                disabled={rs === "loading" || rs === "success" || rs === "limit"}
+                                                                className={`inline-flex items-center gap-1 font-semibold px-2 py-1 rounded-lg transition-all text-xs ${
+                                                                    rs === "loading"
+                                                                        ? "bg-amber-50 text-amber-400 cursor-wait"
+                                                                        : rs === "success"
+                                                                          ? "bg-emerald-50 text-emerald-600 cursor-default"
+                                                                          : rs === "limit"
+                                                                            ? "bg-slate-50 text-slate-400 cursor-not-allowed"
+                                                                            : rs === "error"
+                                                                              ? "bg-red-50 text-red-600 hover:bg-red-100"
+                                                                              : "text-amber-600 hover:text-amber-800 hover:bg-amber-50"
+                                                                }`}
+                                                            >
+                                                                {rs === "loading" && (
+                                                                    <span className="w-2.5 h-2.5 border border-amber-400 border-t-transparent rounded-full animate-spin" />
+                                                                )}
+                                                                {rs === "success" && (
+                                                                    <svg
+                                                                        className="w-2.5 h-2.5"
+                                                                        fill="none"
+                                                                        viewBox="0 0 24 24"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth={3}
+                                                                    >
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                )}
+                                                                {rs === "limit" && "At limit"}
+                                                                {rs === "error" && "Retry failed"}
+                                                                {rs === "idle" && "Retry"}
+                                                                {rs === "loading" && "Retrying…"}
+                                                                {rs === "success" && "Triggered"}
+                                                            </button>
+                                                            {/* Inline error/success message */}
+                                                            {regenMsg[job.jobId] && rs !== "idle" && rs !== "loading" && (
+                                                                <span
+                                                                    className={`text-[10px] leading-tight max-w-36 ${rs === "success" ? "text-emerald-600" : "text-red-500"}`}
+                                                                >
+                                                                    {rs === "success" ? "AI generation started" : regenMsg[job.jobId].split(".")[0]}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

@@ -47,6 +47,18 @@ interface JobDetail {
     };
     stateLog: StateLogEntry[];
     tokenLog: TokenLog[];
+    regenerationLog: RegenerationEntry[];
+    regenerationAttemptsUsed: number;
+    regenerationMaxAttempts: number;
+    canRegenerate: boolean;
+}
+
+interface RegenerationEntry {
+    id: string;
+    attemptNumber: number;
+    triggeredBy: string;
+    status: "triggered" | "completed" | "failed";
+    createdAt: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -123,13 +135,17 @@ export default function JobDetailPage() {
     }
 
     async function regenerate() {
-        if (!confirm("Trigger regeneration for this failed job? This will use OpenAI tokens.")) return;
+        if (!confirm("Re-trigger the paid AI breakdown for this failed job? This will use OpenAI tokens.")) return;
         try {
             await adminApi.regenerateJob(jobId);
-            setActionMsg({ type: "success", text: "Regeneration triggered successfully." });
+            setActionMsg({
+                type: "success",
+                text: "Regeneration triggered. The job is now processing — refresh in a few seconds to see the updated status.",
+            });
             loadJob();
         } catch (err: unknown) {
-            setActionMsg({ type: "error", text: err instanceof Error ? err.message : "Failed to regenerate" });
+            const msg = err instanceof Error ? err.message : "Failed to regenerate";
+            setActionMsg({ type: "error", text: msg });
         }
     }
 
@@ -429,6 +445,90 @@ export default function JobDetailPage() {
                             </tbody>
                         </table>
                     </div>
+                </div>
+            )}
+
+            {/* ── Regeneration history ── */}
+            {job.status === "FAILED" && (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-5">
+                    <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                        <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">Regeneration Attempts</p>
+                        <div className="flex items-center gap-3">
+                            <span className="text-xs text-slate-400">
+                                {job.regenerationAttemptsUsed} of {job.regenerationMaxAttempts} attempts used
+                            </span>
+                            {/* Attempt counter bar */}
+                            <div className="flex items-center gap-1">
+                                {Array.from({ length: job.regenerationMaxAttempts }).map((_, i) => (
+                                    <div
+                                        key={i}
+                                        className={`w-4 h-1.5 rounded-full ${i < job.regenerationAttemptsUsed ? "bg-amber-400" : "bg-slate-200"}`}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {job.regenerationLog.length === 0 ? (
+                        <p className="text-xs text-slate-400 px-5 py-4">
+                            No regeneration attempts yet.
+                            {job.canRegenerate ? " Click Regenerate above to retry the AI breakdown." : ""}
+                        </p>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {job.regenerationLog.map((entry) => (
+                                <div key={entry.id} className="flex items-center gap-4 px-5 py-3 text-xs">
+                                    <span className="font-mono font-bold text-slate-500 shrink-0">#{entry.attemptNumber}</span>
+                                    <span
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                                            entry.status === "completed"
+                                                ? "bg-emerald-100 text-emerald-700"
+                                                : entry.status === "failed"
+                                                  ? "bg-red-100 text-red-700"
+                                                  : "bg-amber-100 text-amber-700"
+                                        }`}
+                                    >
+                                        <span
+                                            className={`w-1.5 h-1.5 rounded-full ${
+                                                entry.status === "completed"
+                                                    ? "bg-emerald-500"
+                                                    : entry.status === "failed"
+                                                      ? "bg-red-500"
+                                                      : "bg-amber-500"
+                                            }`}
+                                        />
+                                        {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                                    </span>
+                                    <span className="text-slate-400">
+                                        by <span className="font-medium text-slate-600">{entry.triggeredBy}</span>
+                                    </span>
+                                    <span className="text-slate-300 ml-auto">
+                                        {new Date(entry.createdAt).toLocaleString("en-GB", {
+                                            day: "numeric",
+                                            month: "short",
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                        })}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {!job.canRegenerate && (
+                        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-500 flex items-center gap-2">
+                            <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                            </svg>
+                            Maximum attempts reached. To allow more, increase{" "}
+                            <strong className="text-slate-700 mx-1">Max Regeneration Attempts</strong> in Settings → Operations.
+                        </div>
+                    )}
                 </div>
             )}
 
