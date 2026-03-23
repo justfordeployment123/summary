@@ -1,61 +1,62 @@
+// src/app/api/admin/jobs/[id]/refund/route.ts
+
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
 import { JobPayment } from "@/models/JobPayment";
-import { JobStateLog } from "@/models/JobStateLog";
-import { JobState } from "@/types/job";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2026-02-25.clover" as any,
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         await dbConnect();
         const { id } = await params;
 
-        const job = await Job.findById(id);
-        const payment = await JobPayment.findOne({ job_id: id });
+        const [job, payment] = await Promise.all([Job.findById(id), JobPayment.findOne({ job_id: id })]);
 
-        if (!job || !payment) {
-            return NextResponse.json({ error: "Job or payment record not found" }, { status: 404 });
-        }
+        if (!job) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+        if (!payment) return NextResponse.json({ error: "No payment record found for this job." }, { status: 404 });
 
+        // Must have a payment intent to refund
         if (!payment.stripe_payment_intent_id) {
-            return NextResponse.json({ error: "No Stripe Payment Intent ID found. Cannot refund via API." }, { status: 400 });
+            return NextResponse.json({ error: "No Stripe payment intent ID on record — cannot issue refund." }, { status: 400 });
         }
 
-        if (job.status === JobState.REFUNDED) {
-            return NextResponse.json({ error: "Job is already refunded" }, { status: 400 });
+        // Can't refund if already refunded
+        if (job.status === "REFUNDED") {
+            return NextResponse.json({ error: "Job is already refunded." }, { status: 409 });
         }
 
-        // 1. Issue the refund via Stripe API
-        await stripe.refunds.create({
+        // Issue full refund via Stripe
+        const refund = await stripe.refunds.create({
             payment_intent: payment.stripe_payment_intent_id,
         });
 
-        // 2. Update Job State (Revokes download access per reqs)
-        job.previous_state = job.status;
-        job.status = JobState.REFUNDED;
-        job.state_transitioned_at = new Date();
-        await job.save();
+        if (refund.status !== "succeeded" && refund.status !== "pending") {
+            return NextResponse.json({ error: `Stripe refund failed with status: ${refund.status}` }, { status: 500 });
+        }
 
-        // 3. Update Payment Record
-        payment.status = "refunded";
-        await payment.save();
-
-        // 4. Log the state transition
-        await JobStateLog.create({
-            job_id: job._id,
-            from_state: job.previous_state,
-            to_state: JobState.REFUNDED,
-            triggered_by: "admin_refund",
+        // Update job status to REFUNDED
+        await Job.findByIdAndUpdate(id, {
+            status: "REFUNDED",
+            previous_state: job.status,
+            state_transitioned_at: new Date(),
         });
 
-        return NextResponse.json({ message: "Refund processed successfully" });
+        // Update payment record
+        await JobPayment.findByIdAndUpdate(payment._id, {
+            status: "refunded",
+        });
+
+        return NextResponse.json({
+            success: true,
+            refundId: refund.id,
+            refundStatus: refund.status,
+        });
     } catch (error: any) {
-        console.error("Refund Error:", error);
-        return NextResponse.json({ error: error.message || "Failed to process refund" }, { status: 500 });
+        console.error("[refund]", error);
+        // Stripe errors have a `type` field — surface the message cleanly
+        return NextResponse.json({ error: error?.message || "Failed to issue refund." }, { status: 500 });
     }
 }

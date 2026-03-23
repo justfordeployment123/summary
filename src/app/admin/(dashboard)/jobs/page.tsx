@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { adminApi } from "@/lib/adminApi"; // <-- IMPORT ADDED HERE
+import { useRouter } from "next/navigation";
+import { adminApi } from "@/lib/adminApi";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Job {
     jobId: string;
@@ -17,36 +19,9 @@ interface Job {
     marketingConsent: boolean;
     disclaimerAcknowledged: boolean;
     previousState: string;
-    payment?: {
-        amount: number;
-        currency: string;
-        status: string;
-        stripeSessionId: string;
-        upsellsPurchased: string[];
-    };
 }
 
-interface StateLogEntry {
-    fromState: string;
-    toState: string;
-    triggeredBy: string;
-    createdAt: string;
-}
-
-interface TokenLog {
-    promptType: string;
-    tokensIn: number;
-    tokensOut: number;
-    costEstimate: number;
-    model: string;
-    attemptNumber: number;
-    createdAt: string;
-}
-
-interface JobDetail extends Job {
-    stateLog: StateLogEntry[];
-    tokenLog: TokenLog[];
-}
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS = [
     "All",
@@ -62,343 +37,285 @@ const STATUS_OPTIONS = [
     "REFUNDED",
 ];
 
-const STATUS_BADGE: Record<string, string> = {
-    UPLOADED: "bg-slate-100 text-slate-600",
-    OCR_PROCESSING: "bg-blue-100 text-blue-700",
-    OCR_FAILED: "bg-red-100 text-red-700",
-    FREE_SUMMARY_GENERATING: "bg-yellow-100 text-yellow-700",
-    FREE_SUMMARY_COMPLETE: "bg-teal-100 text-teal-700",
-    AWAITING_PAYMENT: "bg-orange-100 text-orange-700",
-    PAYMENT_CONFIRMED: "bg-blue-100 text-blue-700",
-    PAID_BREAKDOWN_GENERATING: "bg-purple-100 text-purple-700",
-    COMPLETED: "bg-emerald-100 text-emerald-700",
-    FAILED: "bg-red-100 text-red-700",
-    REFUNDED: "bg-slate-100 text-slate-500",
+const STATUS_BADGE: Record<string, { bg: string; dot: string; label: string }> = {
+    UPLOADED:                 { bg: "bg-slate-100 text-slate-600",   dot: "bg-slate-400",   label: "Uploaded" },
+    OCR_PROCESSING:           { bg: "bg-blue-100 text-blue-700",     dot: "bg-blue-500",    label: "OCR Processing" },
+    OCR_FAILED:               { bg: "bg-red-100 text-red-700",       dot: "bg-red-500",     label: "OCR Failed" },
+    FREE_SUMMARY_GENERATING:  { bg: "bg-yellow-100 text-yellow-700", dot: "bg-yellow-500",  label: "Generating Summary" },
+    FREE_SUMMARY_COMPLETE:    { bg: "bg-teal-100 text-teal-700",     dot: "bg-teal-500",    label: "Summary Ready" },
+    AWAITING_PAYMENT:         { bg: "bg-orange-100 text-orange-700", dot: "bg-orange-500",  label: "Awaiting Payment" },
+    PAYMENT_CONFIRMED:        { bg: "bg-blue-100 text-blue-700",     dot: "bg-blue-500",    label: "Payment Confirmed" },
+    PAID_BREAKDOWN_GENERATING:{ bg: "bg-purple-100 text-purple-700", dot: "bg-purple-500",  label: "Generating Breakdown" },
+    COMPLETED:                { bg: "bg-emerald-100 text-emerald-700",dot: "bg-emerald-500", label: "Completed" },
+    FAILED:                   { bg: "bg-red-100 text-red-700",       dot: "bg-red-500",     label: "Failed" },
+    REFUNDED:                 { bg: "bg-slate-100 text-slate-500",   dot: "bg-slate-400",   label: "Refunded" },
 };
 
-export default function AdminJobsPage() {
-    const searchParams = useSearchParams();
-    const router = useRouter();
-    const preselectedId = searchParams.get("id");
+const URGENCY_BADGE: Record<string, string> = {
+    Routine:       "bg-emerald-50 text-emerald-700 border-emerald-200",
+    Important:     "bg-amber-50 text-amber-700 border-amber-200",
+    "Time-Sensitive": "bg-red-50 text-red-700 border-red-200",
+};
 
-    const [jobs, setJobs] = useState<Job[]>([]);
-    const [selectedJob, setSelectedJob] = useState<JobDetail | null>(null);
+function StatusBadge({ status }: { status: string }) {
+    const cfg = STATUS_BADGE[status] ?? { bg: "bg-slate-100 text-slate-500", dot: "bg-slate-400", label: status };
+    return (
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+            {cfg.label}
+        </span>
+    );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function AdminJobsPage() {
+    const router = useRouter();
+
+    const [jobs,      setJobs]      = useState<Job[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-    const [error, setError] = useState("");
+    const [error,     setError]     = useState("");
 
     // Filters
-    const [statusFilter, setStatusFilter] = useState("All");
+    const [statusFilter,   setStatusFilter]   = useState("All");
     const [categoryFilter, setCategoryFilter] = useState("");
-    const [dateFrom, setDateFrom] = useState("");
-    const [dateTo, setDateTo] = useState("");
-    const [searchEmail, setSearchEmail] = useState("");
+    const [dateFrom,       setDateFrom]       = useState("");
+    const [dateTo,         setDateTo]         = useState("");
+    const [searchEmail,    setSearchEmail]    = useState("");
+    const [searchInput,    setSearchInput]    = useState(""); // controlled input before debounce
 
     const fetchJobs = useCallback(async () => {
         setIsLoading(true);
+        setError("");
         try {
             const params = new URLSearchParams();
             if (statusFilter !== "All") params.set("status", statusFilter);
-            if (categoryFilter) params.set("category", categoryFilter);
-            if (dateFrom) params.set("from", dateFrom);
-            if (dateTo) params.set("to", dateTo);
-            if (searchEmail) params.set("email", searchEmail);
-
-            // 1. LINKED: Use adminApi to fetch jobs
-            const data = await adminApi.getJobs(params);
+            if (categoryFilter)         params.set("category", categoryFilter);
+            if (dateFrom)               params.set("from", dateFrom);
+            if (dateTo)                 params.set("to", dateTo);
+            if (searchEmail)            params.set("email", searchEmail);
+            const data = await adminApi.getJobs(params) as { jobs: Job[] };
             setJobs(data.jobs);
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to load jobs");
         } finally {
             setIsLoading(false);
         }
     }, [statusFilter, categoryFilter, dateFrom, dateTo, searchEmail]);
 
+    useEffect(() => { fetchJobs(); }, [fetchJobs]);
+
+    // Debounce email search
     useEffect(() => {
-        fetchJobs();
-    }, [fetchJobs]);
+        const t = setTimeout(() => setSearchEmail(searchInput), 400);
+        return () => clearTimeout(t);
+    }, [searchInput]);
 
-    useEffect(() => {
-        if (preselectedId) loadJobDetail(preselectedId);
-    }, [preselectedId]);
-
-    async function loadJobDetail(jobId: string) {
-        setIsLoadingDetail(true);
-        try {
-            // 2. LINKED: Use adminApi to fetch job details
-            const data = await adminApi.getJobDetail(jobId);
-            setSelectedJob(data);
-        } catch (err: any) {
-            alert(`Error: ${err.message}`);
-        } finally {
-            setIsLoadingDetail(false);
-        }
+    function clearFilters() {
+        setStatusFilter("All");
+        setCategoryFilter("");
+        setDateFrom("");
+        setDateTo("");
+        setSearchInput("");
+        setSearchEmail("");
     }
 
-    async function regenerateJob(jobId: string) {
-        if (!confirm("Trigger regeneration for this failed job? This will use OpenAI tokens.")) return;
-        try {
-            // 3. LINKED: Use adminApi to regenerate
-            await adminApi.regenerateJob(jobId);
-            alert("Regeneration triggered.");
-            fetchJobs();
-            if (selectedJob?.jobId === jobId) loadJobDetail(jobId);
-        } catch (err: any) {
-            alert(`Failed: ${err.message}`);
-        }
-    }
-
-    async function refundJob(jobId: string) {
-        if (!confirm("Issue a full refund for this job via Stripe? This cannot be undone.")) return;
-        try {
-            // 4. LINKED: Use adminApi to refund
-            await adminApi.refundJob(jobId);
-            alert("Refund issued. Job marked as REFUNDED.");
-            fetchJobs();
-            if (selectedJob?.jobId === jobId) loadJobDetail(jobId);
-        } catch (err: any) {
-            alert(`Failed: ${err.message}`);
-        }
-    }
+    const hasActiveFilters = statusFilter !== "All" || categoryFilter || dateFrom || dateTo || searchEmail;
 
     return (
-        <div className="flex h-full" style={{ minHeight: "calc(100vh - 64px)" }}>
-            {/* Left panel: job list */}
-            <div className="w-full lg:w-1/2 xl:w-2/5 border-r border-slate-200 flex flex-col">
-                {/* Filters */}
-                <div className="p-4 border-b border-slate-200 space-y-3 bg-slate-50">
-                    <h2 className="text-sm font-bold text-slate-700">Job Management</h2>
+        <div className="p-6">
+            {/* ── Page header ── */}
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h1 className="text-xl font-bold text-slate-800">Job Management</h1>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                        {isLoading ? "Loading…" : `${jobs.length} job${jobs.length !== 1 ? "s" : ""} found`}
+                    </p>
+                </div>
+                <button
+                    onClick={fetchJobs}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                </button>
+            </div>
 
-                    <input
-                        type="text"
-                        placeholder="Search by email…"
-                        value={searchEmail}
-                        onChange={(e) => setSearchEmail(e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
-                    />
+            {/* ── Filter bar ── */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-5">
+                <div className="flex flex-wrap gap-3 items-end">
+                    {/* Email search */}
+                    <div className="flex-1 min-w-48">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Search Email</label>
+                        <div className="relative">
+                            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <input
+                                type="text"
+                                placeholder="user@example.com"
+                                value={searchInput}
+                                onChange={(e) => setSearchInput(e.target.value)}
+                                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-slate-50"
+                            />
+                        </div>
+                    </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    {/* Status */}
+                    <div className="min-w-44">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</label>
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
-                            className="px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
+                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50"
                         >
                             {STATUS_OPTIONS.map((s) => (
-                                <option key={s}>{s}</option>
+                                <option key={s} value={s}>
+                                    {s === "All" ? "All Statuses" : STATUS_BADGE[s]?.label ?? s}
+                                </option>
                             ))}
                         </select>
+                    </div>
+
+                    {/* Category */}
+                    <div className="min-w-36">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Category</label>
                         <input
                             type="text"
-                            placeholder="Category filter…"
+                            placeholder="Legal, Medical…"
                             value={categoryFilter}
                             onChange={(e) => setCategoryFilter(e.target.value)}
-                            className="px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
+                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50"
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    {/* Date range */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">From</label>
                         <input
                             type="date"
                             value={dateFrom}
                             onChange={(e) => setDateFrom(e.target.value)}
-                            className="px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
+                            className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50"
                         />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">To</label>
                         <input
                             type="date"
                             value={dateTo}
                             onChange={(e) => setDateTo(e.target.value)}
-                            className="px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
+                            className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50"
                         />
                     </div>
-                </div>
 
-                {/* Job list */}
-                <div className="overflow-y-auto flex-1">
-                    {isLoading ? (
-                        <div className="flex items-center justify-center h-32">
-                            <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
-                        </div>
-                    ) : jobs.length === 0 ? (
-                        <div className="text-center py-16 text-slate-400 text-sm">No jobs found</div>
-                    ) : (
-                        jobs.map((job) => (
-                            <button
-                                key={job.jobId}
-                                onClick={() => loadJobDetail(job.jobId)}
-                                className={`w-full text-left px-4 py-4 border-b border-slate-100 hover:bg-teal-50 transition-colors ${
-                                    selectedJob?.jobId === job.jobId ? "bg-teal-50 border-l-2 border-l-teal-500" : ""
-                                }`}
-                            >
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs font-mono text-slate-500">{job.referenceId}</span>
-                                    <span
-                                        className={`text-xs px-2 py-0.5 rounded-full font-semibold ${STATUS_BADGE[job.status] ?? "bg-slate-100 text-slate-500"}`}
-                                    >
-                                        {job.status.replace(/_/g, " ")}
-                                    </span>
-                                </div>
-                                <div className="text-sm font-medium text-slate-700">{job.userEmail}</div>
-                                <div className="text-xs text-slate-400 mt-0.5">
-                                    {job.category} · {new Date(job.createdAt).toLocaleDateString("en-GB")}
-                                </div>
-                            </button>
-                        ))
+                    {/* Clear */}
+                    {hasActiveFilters && (
+                        <button
+                            onClick={clearFilters}
+                            className="px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                        >
+                            Clear filters
+                        </button>
                     )}
                 </div>
             </div>
 
-            {/* Right panel: job detail */}
-            <div className="flex-1 overflow-y-auto">
-                {isLoadingDetail ? (
-                    <div className="flex items-center justify-center h-32">
+            {/* ── Error ── */}
+            {error && (
+                <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                    {error}
+                </div>
+            )}
+
+            {/* ── Table ── */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                {/* Table header */}
+                <div className="grid grid-cols-[1fr_140px_120px_100px_80px_100px] gap-4 px-5 py-3 bg-slate-50 border-b border-slate-200">
+                    {["User", "Status", "Category", "Urgency", "Ref", "Date"].map((h) => (
+                        <span key={h} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{h}</span>
+                    ))}
+                </div>
+
+                {/* Rows */}
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-20">
                         <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
                     </div>
-                ) : selectedJob ? (
-                    <div className="p-6 space-y-5">
-                        {/* Header */}
-                        <div className="flex items-start justify-between gap-4 flex-wrap">
-                            <div>
-                                <h2 className="text-lg font-bold text-slate-900">{selectedJob.userEmail}</h2>
-                                <p className="text-xs text-slate-400 font-mono mt-0.5">Ref: {selectedJob.referenceId}</p>
-                            </div>
-                            <div className="flex gap-2 flex-wrap">
-                                {selectedJob.status === "FAILED" && (
-                                    <button
-                                        onClick={() => regenerateJob(selectedJob.jobId)}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors border border-amber-200"
-                                    >
-                                        🔄 Regenerate
-                                    </button>
-                                )}
-                                {(selectedJob.status === "COMPLETED" || selectedJob.status === "PAYMENT_CONFIRMED") && (
-                                    <button
-                                        onClick={() => refundJob(selectedJob.jobId)}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors border border-red-200"
-                                    >
-                                        ↩ Refund
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Job info */}
-                        <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 grid grid-cols-2 gap-3 text-xs">
-                            {[
-                                [
-                                    "Status",
-                                    <span
-                                        key="status-badge"
-                                        className={`px-2 py-0.5 rounded-full font-semibold ${STATUS_BADGE[selectedJob.status] ?? ""}`}
-                                    >
-                                        {selectedJob.status.replace(/_/g, " ")}
-                                    </span>,
-                                ],
-                                ["Category", selectedJob.category],
-                                ["Name", selectedJob.userName],
-                                ["Urgency", selectedJob.urgency || "—"],
-                                ["Marketing Consent", selectedJob.marketingConsent ? "✅ Yes" : "No"],
-                                ["Disclaimer Ack.", selectedJob.disclaimerAcknowledged ? "✅ Yes" : "No"],
-                                ["Created", new Date(selectedJob.createdAt).toLocaleString("en-GB")],
-                                ["Updated", new Date(selectedJob.updatedAt).toLocaleString("en-GB")],
-                            ].map(([label, value]) => (
-                                <div key={String(label)}>
-                                    <div className="text-slate-400 mb-0.5">{label}</div>
-                                    <div className="font-semibold text-slate-700">{value as any}</div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Payment */}
-                        {selectedJob.payment && (
-                            <div>
-                                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">Payment</h3>
-                                <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 grid grid-cols-2 gap-3 text-xs">
-                                    {[
-                                        ["Amount", `£${(selectedJob.payment.amount / 100).toFixed(2)} ${selectedJob.payment.currency.toUpperCase()}`],
-                                        ["Status", selectedJob.payment.status],
-                                        ["Stripe Session", selectedJob.payment.stripeSessionId],
-                                        ["Upsells", selectedJob.payment.upsellsPurchased.join(", ") || "None"],
-                                    ].map(([label, value]) => (
-                                        <div key={label}>
-                                            <div className="text-slate-400 mb-0.5">{label}</div>
-                                            <div className="font-semibold text-slate-700 break-all">{value}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* State log */}
-                        <div>
-                            <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">State History</h3>
-                            <div className="space-y-1">
-                                {selectedJob.stateLog.map((entry, i) => (
-                                    <div
-                                        key={i}
-                                        className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100"
-                                    >
-                                        <span className="text-slate-400 shrink-0">{new Date(entry.createdAt).toLocaleString("en-GB")}</span>
-                                        <span className="font-mono text-slate-500">{entry.fromState || "—"}</span>
-                                        <span className="text-slate-300">→</span>
-                                        <span className="font-mono font-semibold text-teal-700">{entry.toState}</span>
-                                        <span className="text-slate-400 ml-auto">via {entry.triggeredBy}</span>
-                                    </div>
-                                ))}
-                                {selectedJob.stateLog.length === 0 && (
-                                    <p className="text-xs text-slate-400 px-3 py-2">No state transitions logged.</p>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Token log */}
-                        {selectedJob.tokenLog.length > 0 && (
-                            <div>
-                                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">Token Usage</h3>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-xs">
-                                        <thead>
-                                            <tr className="bg-slate-50 border border-slate-200 rounded-lg">
-                                                {["Type", "Model", "Tokens In", "Tokens Out", "Est. Cost", "Attempt", "Time"].map((h) => (
-                                                    <th key={h} className="text-left px-3 py-2 font-semibold text-slate-500">
-                                                        {h}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {selectedJob.tokenLog.map((t, i) => (
-                                                <tr key={i} className="border-b border-slate-100">
-                                                    <td className="px-3 py-2 font-semibold text-slate-600">{t.promptType}</td>
-                                                    <td className="px-3 py-2 text-slate-500 font-mono">{t.model}</td>
-                                                    <td className="px-3 py-2 text-slate-600">{t.tokensIn.toLocaleString()}</td>
-                                                    <td className="px-3 py-2 text-slate-600">{t.tokensOut.toLocaleString()}</td>
-                                                    <td className="px-3 py-2 text-slate-600">${t.costEstimate.toFixed(4)}</td>
-                                                    <td className="px-3 py-2 text-slate-500">#{t.attemptNumber}</td>
-                                                    <td className="px-3 py-2 text-slate-400">{new Date(t.createdAt).toLocaleString("en-GB")}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                ) : jobs.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                        <svg className="w-10 h-10 mb-3 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        <p className="text-sm font-medium">No jobs found</p>
+                        {hasActiveFilters && (
+                            <button onClick={clearFilters} className="mt-2 text-xs text-teal-600 hover:underline">
+                                Clear filters
+                            </button>
                         )}
                     </div>
                 ) : (
-                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">
-                        <div className="text-center">
-                            <svg className="w-10 h-10 mx-auto mb-3 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={1.5}
-                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                                />
-                            </svg>
-                            Select a job to view details
-                        </div>
+                    <div className="divide-y divide-slate-100">
+                        {jobs.map((job) => (
+                            <button
+                                key={job.jobId}
+                                onClick={() => router.push(`/admin/jobs/${job.jobId}`)}
+                                className="w-full grid grid-cols-[1fr_140px_120px_100px_80px_100px] gap-4 px-5 py-4 text-left hover:bg-slate-50 transition-colors group items-center"
+                            >
+                                {/* User */}
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-teal-700 transition-colors">
+                                        {job.userEmail}
+                                    </p>
+                                    <p className="text-xs text-slate-400 mt-0.5">{job.userName}</p>
+                                </div>
+
+                                {/* Status */}
+                                <div><StatusBadge status={job.status} /></div>
+
+                                {/* Category */}
+                                <div>
+                                    <span className="text-sm text-slate-600">{job.category}</span>
+                                </div>
+
+                                {/* Urgency */}
+                                <div>
+                                    {job.urgency ? (
+                                        <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${URGENCY_BADGE[job.urgency] ?? "bg-slate-50 text-slate-500 border-slate-200"}`}>
+                                            {job.urgency}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-slate-300">—</span>
+                                    )}
+                                </div>
+
+                                {/* Ref */}
+                                <div>
+                                    <span className="text-xs font-mono text-slate-400">{job.referenceId}</span>
+                                </div>
+
+                                {/* Date */}
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs text-slate-400">
+                                        {new Date(job.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                                    </span>
+                                    <svg className="w-3.5 h-3.5 text-slate-300 group-hover:text-teal-500 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </div>
+                            </button>
+                        ))}
                     </div>
                 )}
             </div>
+
+            {jobs.length > 0 && !isLoading && (
+                <p className="text-xs text-slate-400 text-center mt-4">
+                    Showing {jobs.length} most recent job{jobs.length !== 1 ? "s" : ""}. Refine filters to narrow results.
+                </p>
+            )}
         </div>
     );
 }
