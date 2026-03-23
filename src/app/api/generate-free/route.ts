@@ -282,11 +282,15 @@ export async function POST(req: Request) {
         await checkAndIncrementMonthlyUsage(tokensIn + tokensOut);
 
         // ── 13. Transition job to FREE_SUMMARY_COMPLETE ──
+        // free_summary is stored so the status endpoint can return it if the
+        // user refreshes or returns to the page (§11 — "temporarily linked to job").
+        // It is NOT extracted_text — it is the AI-generated plain-English output.
         await Job.findByIdAndUpdate(jobId, {
             status: JobState.FREE_SUMMARY_COMPLETE,
             previous_state: JobState.FREE_SUMMARY_GENERATING,
             state_transitioned_at: new Date(),
             urgency,
+            free_summary: summary,
         });
 
         return NextResponse.json({ summary, urgency });
