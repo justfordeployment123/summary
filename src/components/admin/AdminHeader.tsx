@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-// ─── Page meta: icon + description per route ─────────────────────────────────
+// ─── Page meta ────────────────────────────────────────────────────────────────
 const PAGE_META: Record<string, { icon: React.ReactNode; description: string }> = {
     dashboard: {
         description: "System overview and recent activity",
@@ -13,6 +13,18 @@ const PAGE_META: Record<string, { icon: React.ReactNode; description: string }> 
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zm9.75-9.75A2.25 2.25 0 0115.75 3.75H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zm0 9.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"
+                />
+            </svg>
+        ),
+    },
+    jobs: {
+        description: "View and manage all submission jobs",
+        icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                 />
             </svg>
         ),
@@ -35,6 +47,18 @@ const PAGE_META: Record<string, { icon: React.ReactNode; description: string }> 
         icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        ),
+    },
+    prompts: {
+        description: "Edit AI prompts and instructions",
+        icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
             </svg>
         ),
     },
@@ -78,8 +102,6 @@ export function AdminHeader() {
             } catch {}
         }
         fetchMe();
-
-        // Live clock — tick every minute
         const tick = setInterval(() => setTime(new Date()), 60_000);
         return () => clearInterval(tick);
     }, []);
@@ -101,50 +123,48 @@ export function AdminHeader() {
     });
 
     return (
-        <header className="bg-white border-b border-slate-200/80 px-7 py-0 flex items-center justify-between shrink-0 h-15">
+        <header className="bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 h-14">
             {/* ── Left: page identity ── */}
             <div className="flex items-center gap-3">
-                {/* Icon badge */}
-                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">{meta.icon}</div>
-
-                {/* Title + breadcrumb description */}
-                <div className="flex items-baseline gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0 border border-teal-100">
+                    {meta.icon}
+                </div>
+                <div className="flex items-baseline gap-2">
                     <h1 className="text-sm font-bold text-slate-900 tracking-tight">{title}</h1>
-                    <span className="hidden sm:block text-xs text-slate-400 font-medium">{meta.description}</span>
+                    <span className="hidden sm:block h-3.5 w-px bg-slate-200" />
+                    <span className="hidden sm:block text-xs text-slate-400">{meta.description}</span>
                 </div>
             </div>
 
-            {/* ── Right: date/time + user chip ── */}
+            {/* ── Right: date/time + user ── */}
             <div className="flex items-center gap-3">
-                {/* Date + time pill */}
-                <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-1.5">
-                    <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                {/* Date + time */}
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                    <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5"
                         />
                     </svg>
-                    <span className="text-xs font-semibold text-slate-600">{dateStr}</span>
+                    <span className="font-medium text-slate-600">{dateStr}</span>
                     <span className="w-px h-3 bg-slate-200" />
-                    <span className="text-xs font-semibold text-slate-400 tabular-nums">{timeStr}</span>
+                    <span className="text-slate-400 tabular-nums">{timeStr}</span>
                 </div>
 
-                {/* Divider */}
                 <span className="hidden md:block w-px h-5 bg-slate-200" />
 
-                {/* User chip */}
-                <div className="flex items-center gap-2.5 pl-0.5">
-                    {/* Avatar */}
-                    <div className="w-7 h-7 rounded-full bg-linear-to-br from-teal-400 to-teal-600 flex items-center justify-center shrink-0 shadow-sm">
+                {/* User pill */}
+                <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center shrink-0">
                         <span className="text-[10px] font-bold text-white tracking-wide">{initials}</span>
                     </div>
-
-                    {/* Email truncated */}
-                    <span className="hidden sm:block text-xs font-semibold text-slate-600 max-w-40 truncate">{adminEmail ?? "Loading…"}</span>
-
-                    {/* Online dot */}
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 shrink-0" />
+                    <div className="hidden sm:block">
+                        <p className="text-xs font-semibold text-slate-700 max-w-40 truncate leading-none">{adminEmail ?? "Loading…"}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Administrator</p>
+                    </div>
+                    {/* Online indicator */}
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
                 </div>
             </div>
         </header>

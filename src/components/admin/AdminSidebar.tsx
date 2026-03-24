@@ -48,21 +48,6 @@ const NAV_ITEMS = [
         ),
     },
     {
-        href: "/admin/settings",
-        label: "Settings",
-        icon: (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-        ),
-    },
-    {
         href: "/admin/pricing",
         label: "Pricing",
         icon: (
@@ -85,6 +70,21 @@ const NAV_ITEMS = [
             </svg>
         ),
     },
+    {
+        href: "/admin/settings",
+        label: "Settings",
+        icon: (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+        ),
+    },
 ];
 
 export function AdminSidebar() {
@@ -95,7 +95,6 @@ export function AdminSidebar() {
     async function handleLogout() {
         setIsLoggingOut(true);
         try {
-            // Using your updated auth path!
             await fetch("/api/admin/auth/logout", { method: "POST" });
         } finally {
             router.push("/admin/login");
@@ -103,51 +102,44 @@ export function AdminSidebar() {
     }
 
     return (
-        <aside className="w-56 shrink-0 bg-slate-900 flex flex-col">
-            <div className="px-5 py-5 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-teal-500 flex items-center justify-center shrink-0">
-                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                            />
-                        </svg>
-                    </div>
-                    <div>
-                        <p className="text-xs font-bold text-white leading-none">ExplainMyLetter</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Admin</p>
-                    </div>
-                </div>
+        <aside className="w-56 shrink-0 bg-white border-r border-slate-200 flex flex-col">
+            {/* ── Logo ── */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center">
+                <img src="/horizontal-logo.png" alt="ExplainMyLetter" style={{ height: 36, borderRadius: 8, objectFit: "contain" }} />
+                <span className="ml-2.5 text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded-md tracking-wide uppercase">
+                    Admin
+                </span>
             </div>
 
-            <nav className="flex-1 px-3 py-4 space-y-0.5">
+            {/* ── Nav ── */}
+            <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
                 {NAV_ITEMS.map((item) => {
                     const isActive = pathname.startsWith(item.href);
                     return (
                         <Link
                             key={item.href}
                             href={item.href}
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                                isActive ? "bg-teal-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                isActive
+                                    ? "bg-teal-500 text-white shadow-sm shadow-teal-200"
+                                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
                             }`}
                         >
-                            {item.icon}
+                            <span className={isActive ? "opacity-100" : "opacity-60"}>{item.icon}</span>
                             {item.label}
                         </Link>
                     );
                 })}
             </nav>
 
-            <div className="px-3 pb-4 border-t border-slate-800 pt-4">
+            {/* ── Footer ── */}
+            <div className="px-3 pb-4 border-t border-slate-100 pt-3 space-y-0.5">
                 <Link
                     href="/"
                     target="_blank"
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors mb-1"
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
                 >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -160,9 +152,9 @@ export function AdminSidebar() {
                 <button
                     onClick={handleLogout}
                     disabled={isLoggingOut}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
                 >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
