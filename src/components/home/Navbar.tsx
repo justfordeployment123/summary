@@ -33,7 +33,7 @@ export function Navbar({ onReset, onScrollToUpload, view }: NavbarProps) {
                 left: 0,
                 right: 0,
                 zIndex: 100,
-                background: scrolled ? "rgba(255,255,255,0.97)" : "rgba(0,255,255,0.85)",
+                background: scrolled ? "rgba(255,255,255,0.97)" : "rgba(255,255,255,0.85)",
                 backdropFilter: "blur(20px)",
                 borderBottom: scrolled ? "1px solid rgba(255,255,255,0.08)" : "1px solid transparent",
                 transition: "all 0.3s",
@@ -60,7 +60,7 @@ export function Navbar({ onReset, onScrollToUpload, view }: NavbarProps) {
                         alt="ExplainMyLetter"
                         style={{
                             // width: 100,
-                            height: 100,
+                            height: 50,
                             borderRadius: 10,
                         }}
                     />
