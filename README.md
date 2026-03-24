@@ -24,118 +24,6 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ```
 explain-my-letter/
-├── src/
-│   ├── app/
-│   │   ├── admin/
-│   │   │   ├── (dashboard)/
-│   │   │   │   ├── layout.tsx
-│   │   │   │   ├── dashboard/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── jobs/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── prompts/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   └── settings/
-│   │   │   │       └── page.tsx
-│   │   │   ├── login/
-│   │   │   │   └── page.tsx
-│   │   │   ├── pricing/
-│   │   │   │   └── page.tsx
-│   │   │   └── upsells/
-│   │   │       └── page.tsx
-│   │   ├── api/
-│   │   │   ├── admin/
-│   │   │   │   ├── auth/
-│   │   │   │   │   ├── login/
-│   │   │   │   │   │   └── route.ts
-│   │   │   │   │   ├── logout/
-│   │   │   │   │   │   └── route.ts
-│   │   │   │   │   ├── me/
-│   │   │   │   │   │   └── route.ts
-│   │   │   │   │   └── setup/
-│   │   │   │   │       └── route.ts
-│   │   │   │   ├── categories/
-│   │   │   │   │   ├── route.ts
-│   │   │   │   │   └── [id]/
-│   │   │   │   │       └── route.ts
-│   │   │   │   ├── dashboard/
-│   │   │   │   │   └── route.ts
-│   │   │   │   ├── jobs/
-│   │   │   │   │   ├── route.ts
-│   │   │   │   │   └── [id]/
-│   │   │   │   │       ├── route.ts
-│   │   │   │   │       ├── refund/
-│   │   │   │   │       │   └── route.ts
-│   │   │   │   │       └── regenerate/
-│   │   │   │   │           └── route.ts
-│   │   │   │   ├── settings/
-│   │   │   │   │   └── route.ts
-│   │   │   │   └── upsells/
-│   │   │   │       ├── route.ts
-│   │   │   │       └── [id]/
-│   │   │   │           └── route.ts
-│   │   │   ├── categories/
-│   │   │   │   └── route.ts
-│   │   │   ├── checkout/
-│   │   │   │   └── route.ts
-│   │   │   ├── create-payment-intent/
-│   │   │   │   └── route.ts
-│   │   │   ├── download/
-│   │   │   │   └── [format]/
-│   │   │   │       └── route.ts
-│   │   │   ├── generate-free/
-│   │   │   │   └── route.ts
-│   │   │   ├── generate-paid/
-│   │   │   │   └── route.ts
-│   │   │   ├── jobs/
-│   │   │   │   └── [id]/
-│   │   │   │       └── status/
-│   │   │   │           └── route.ts
-│   │   │   ├── process/
-│   │   │   │   └── route.ts
-│   │   │   ├── upload/
-│   │   │   │   └── route.ts
-│   │   │   ├── upsells/
-│   │   │   │   └── route.ts
-│   │   │   └── webhook/
-│   │   │       └── route.ts
-│   │   ├── (public)/
-│   │   │   ├── page.tsx
-│   │   │   └── success/
-│   │   │       └── page.tsx
-│   │   ├── public/
-│   │   │   ├── page.tsx
-│   │   │   └── success/
-│   │   │       └── page.tsx
-│   │   ├── globals.css
-│   │   └── layout.tsx
-│   ├── components/
-│   │   └── admin/
-│   │       ├── AdminHeader.tsx
-│   │       └── AdminSidebar.tsx
-│   ├── lib/
-│   │   ├── adminApi.ts
-│   │   ├── api.ts
-│   │   ├── db.ts
-│   │   └── tokenBudget.ts
-│   ├── models/
-│   │   ├── AdminUser.ts
-│   │   ├── Category.ts
-│   │   ├── Job.ts
-│   │   ├── JobPayment.ts
-│   │   ├── JobStateLog.ts
-│   │   ├── JobToken.ts
-│   │   ├── Prompt.ts
-│   │   ├── Setting.ts
-│   │   ├── Temp.ts
-│   │   ├── Upsell.ts
-│   │   └── WebhookEvent.ts
-│   ├── services/
-│   │   └── jobService.ts
-│   ├── types/
-│   │   └── job.ts
-│   └── proxy.ts
-├── public/
 ├── eslint.config.mjs
 ├── next-env.d.ts
 ├── next.config.ts
@@ -144,7 +32,148 @@ explain-my-letter/
 ├── README.md
 ├── test-aws.js
 ├── tsconfig.json
-└── [other config files]
+├── public/
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── horizontal-logo.png
+│   ├── logo-icon.png
+│   ├── next.svg
+│   ├── stacked-logo.png
+│   ├── vercel.svg
+│   └── window.svg
+└── src/
+    ├── proxy.ts
+    ├── app/
+    │   ├── globals.css
+    │   ├── layout.tsx
+    │   ├── (public)/
+    │   │   └── page.tsx
+    │   ├── admin/
+    │   │   ├── (dashboard)/
+    │   │   │   ├── layout.tsx
+    │   │   │   ├── dashboard/
+    │   │   │   │   └── page.tsx
+    │   │   │   ├── jobs/
+    │   │   │   │   ├── page.tsx
+    │   │   │   │   └── [id]/
+    │   │   │   │       └── page.tsx
+    │   │   │   ├── prompts/
+    │   │   │   │   └── page.tsx
+    │   │   │   └── settings/
+    │   │   │       └── page.tsx
+    │   │   ├── login/
+    │   │   │   └── page.tsx
+    │   │   ├── pricing/
+    │   │   │   └── page.tsx
+    │   │   └── upsells/
+    │   │       └── page.tsx
+    │   └── api/
+    │       ├── admin/
+    │       │   ├── auth/
+    │       │   │   ├── login/
+    │       │   │   │   └── route.ts
+    │       │   │   ├── logout/
+    │       │   │   │   └── route.ts
+    │       │   │   ├── me/
+    │       │   │   │   └── route.ts
+    │       │   │   └── setup/
+    │       │   │       └── route.ts
+    │       │   ├── categories/
+    │       │   │   ├── route.ts
+    │       │   │   └── [id]/
+    │       │   │       └── route.ts
+    │       │   ├── cleanup/
+    │       │   │   └── route.ts
+    │       │   ├── dashboard/
+    │       │   │   └── route.ts
+    │       │   ├── jobs/
+    │       │   │   ├── route.ts
+    │       │   │   └── [id]/
+    │       │   │       ├── route.ts
+    │       │   │       ├── refund/
+    │       │   │       │   └── route.ts
+    │       │   │       └── regenerate/
+    │       │   │           └── route.ts
+    │       │   ├── prompts/
+    │       │   │   ├── route.ts
+    │       │   │   └── [id]/
+    │       │   │       ├── route.ts
+    │       │   │       └── versions/
+    │       │   │           └── route.ts
+    │       │   ├── settings/
+    │       │   │   └── route.ts
+    │       │   └── upsells/
+    │       │       ├── route.ts
+    │       │       └── [id]/
+    │       │           └── route.ts
+    │       ├── categories/
+    │       │   └── route.ts
+    │       ├── checkout/
+    │       │   └── route.ts
+    │       ├── create-payment-intent/
+    │       │   └── route.ts
+    │       ├── download/
+    │       │   └── [format]/
+    │       │       └── route.ts
+    │       ├── generate-free/
+    │       │   └── route.ts
+    │       ├── generate-paid/
+    │       │   ├── paidService.ts
+    │       │   └── route.ts
+    │       ├── jobs/
+    │       │   └── [id]/
+    │       │       └── status/
+    │       │           └── route.ts
+    │       ├── process/
+    │       │   └── route.ts
+    │       ├── upload/
+    │       │   └── route.ts
+    │       ├── upsells/
+    │       │   └── route.ts
+    │       └── webhook/
+    │           └── route.ts
+    ├── components/
+    │   ├── admin/
+    │   │   ├── AdminHeader.tsx
+    │   │   └── AdminSidebar.tsx
+    │   └── home/
+    │       ├── cards.tsx
+    │       ├── CTABannerAndFooter.tsx
+    │       ├── FAQSection.tsx
+    │       ├── GlobalStyles.tsx
+    │       ├── HeroSection.tsx
+    │       ├── HowItWorksSection.tsx
+    │       ├── index.ts
+    │       ├── Navbar.tsx
+    │       ├── primitives.tsx
+    │       ├── ResultViews.tsx
+    │       ├── SummaryView.tsx
+    │       └── UploadSection.tsx
+    ├── lib/
+    │   ├── adminApi.ts
+    │   ├── api.ts
+    │   ├── db.ts
+    │   ├── homeUtils.ts
+    │   └── tokenBudget.ts
+    ├── models/
+    │   ├── AdminUser.ts
+    │   ├── Category.ts
+    │   ├── Job.ts
+    │   ├── JobPayment.ts
+    │   ├── JobStateLog.ts
+    │   ├── JobToken.ts
+    │   ├── Prompt.ts
+    │   ├── PromptVersion.ts
+    │   ├── RegenerationLog.ts
+    │   ├── Setting.ts
+    │   ├── Temp.ts
+    │   ├── Upsell.ts
+    │   └── WebhookEvent.ts
+    ├── services/
+    │   └── jobService.ts
+    └── types/
+        ├── home.ts
+        └── job.ts
 ```
 
 ## API Schema
