@@ -46,21 +46,7 @@ export function Footer() {
             <div style={{ maxWidth: 1100, margin: "0 auto" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 20, marginBottom: 28 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div
-                            style={{
-                                width: 34,
-                                height: 34,
-                                borderRadius: 10,
-                                background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}
-                        >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
-                                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                        </div>
+                        <img src="/logo-icon.png" alt="ExplainMyLetter" style={{ width: 34, height: 34, filter: "brightness(0) invert(1)" }} />
                         <div>
                             <div style={{ fontWeight: 900, color: "#fff", fontSize: "0.95rem" }}>ExplainMyLetter</div>
                             <div style={{ fontSize: "0.7rem", color: "#54D6D4", fontWeight: 600, letterSpacing: "0.04em" }}>
