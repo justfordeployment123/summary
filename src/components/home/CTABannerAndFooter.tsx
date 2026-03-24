@@ -1,0 +1,98 @@
+"use client";
+
+import type { CTABannerProps } from "@/types/home";
+
+export function CTABanner({ onScrollToUpload }: CTABannerProps) {
+    return (
+        <section className="hero-mesh" style={{ padding: "80px 24px", textAlign: "center" }}>
+            <div style={{ maxWidth: 600, margin: "0 auto", position: "relative", zIndex: 1 }}>
+                <h2 style={{ fontSize: "2.4rem", fontWeight: 900, color: "#fff", letterSpacing: "-0.02em", marginBottom: 16, lineHeight: 1.15 }}>
+                    Got a letter you
+                    <br />
+                    can't understand?
+                </h2>
+                <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "1rem", marginBottom: 36, lineHeight: 1.6 }}>
+                    Upload it now and get a plain-English summary in seconds — free, no account needed.
+                </p>
+                <button
+                    onClick={onScrollToUpload}
+                    style={{
+                        padding: "16px 36px",
+                        borderRadius: 14,
+                        background: "#fff",
+                        color: "#12A1A6",
+                        border: "none",
+                        fontFamily: "Raleway,sans-serif",
+                        fontWeight: 900,
+                        fontSize: "1rem",
+                        cursor: "pointer",
+                        boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+                        transition: "all 0.25s",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                    }}
+                >
+                    Try It Free Now →
+                </button>
+            </div>
+        </section>
+    );
+}
+
+export function Footer() {
+    return (
+        <footer style={{ background: "#0F233F", padding: "40px 24px 28px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 20, marginBottom: 28 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                            style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 10,
+                                background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                            }}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
+                                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: 900, color: "#fff", fontSize: "0.95rem" }}>ExplainMyLetter</div>
+                            <div style={{ fontSize: "0.7rem", color: "#54D6D4", fontWeight: 600, letterSpacing: "0.04em" }}>
+                                Clarity. Confidence. Next Steps.
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+                        {["Privacy Policy", "Terms of Service", "Contact"].map((l) => (
+                            <a key={l} className="nav-link" style={{ fontSize: "0.8rem" }}>
+                                {l}
+                            </a>
+                        ))}
+                    </div>
+                </div>
+                <div
+                    style={{
+                        borderTop: "1px solid rgba(255,255,255,0.07)",
+                        paddingTop: 20,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: 12,
+                    }}
+                >
+                    <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.35)" }}>© 2025 ExplainMyLetter. All rights reserved.</p>
+                    <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.25)", maxWidth: 440, textAlign: "right" }}>
+                        AI-generated summaries are for informational purposes only and do not constitute legal, financial, medical, or professional
+                        advice.
+                    </p>
+                </div>
+            </div>
+        </footer>
+    );
+}
