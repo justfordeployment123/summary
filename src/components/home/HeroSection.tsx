@@ -36,7 +36,7 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
                             <circle cx="5" cy="5" r="5" />
                         </svg>
-                        AI-Powered · Instant Results
+                        Instant Results · Built for UK Letters
                     </span>
                 </div>
 
@@ -91,27 +91,11 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                             gap: 8,
                         }}
                     >
-                        Upload Your Letter Free
+                        Upload FREE Here
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                         </svg>
                     </button>
-                    {/* <button
-                        style={{
-                            padding: "15px 28px",
-                            borderRadius: 14,
-                            background: "rgba(255,255,255,0.08)",
-                            color: "rgba(255,255,255,0.9)",
-                            border: "1.5px solid rgba(255,255,255,0.2)",
-                            fontFamily: "Raleway,sans-serif",
-                            fontWeight: 700,
-                            fontSize: "0.9rem",
-                            cursor: "pointer",
-                            backdropFilter: "blur(10px)",
-                        }}
-                    >
-                        See How It Works ↓
-                    </button> */}
                 </div>
 
                 <div className="anim-fadeUp-4 stat-row" style={{ display: "flex", gap: 16, justifyContent: "center" }}>

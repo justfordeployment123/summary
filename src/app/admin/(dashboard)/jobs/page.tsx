@@ -358,10 +358,10 @@ export default function AdminJobsPage() {
                                 >
                                     {/* User / Email */}
                                     <td className="px-6 py-4">
-                                        <p className="text-sm font-semibold text-slate-800 group-hover:text-teal-700 transition-colors truncate max-w-[220px]">
+                                        <p className="text-sm font-semibold text-slate-800 group-hover:text-teal-700 transition-colors truncate max-w-55">
                                             {job.userEmail}
                                         </p>
-                                        <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[220px]">{job.userName || "—"}</p>
+                                        <p className="text-xs text-slate-400 mt-0.5 truncate max-w-55">{job.userName || "—"}</p>
                                     </td>
 
                                     {/* Status */}

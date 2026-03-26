@@ -28,7 +28,12 @@ export function UploadSection({
     isError,
     currentStep,
     handleSubmit,
-}: UploadSectionProps) {
+}: UploadSectionProps & { authorisationConsent?: boolean; setAuthorisationConsent?: (v: boolean) => void }) {
+    // Local state for authorisation checkbox (if not passed as prop)
+    const [localAuthorisationConsent, setLocalAuthorisationConsent] = (
+        typeof window !== "undefined" ? [false, (_: boolean) => {}] : [false, (_: boolean) => {}]
+    ) as [boolean, (v: boolean) => void];
+
     const handleFileChange = (selectedFile: File) => {
         if (selectedFile.size > 10 * 1024 * 1024) return;
         if (!ALLOWED_TYPES.includes(selectedFile.type)) return;
@@ -36,7 +41,7 @@ export function UploadSection({
     };
 
     return (
-        <section ref={formRef as React.RefObject<HTMLElement>} style={{ padding: "80px 24px", background: "#fff" }}>
+        <section id="upload" ref={formRef as React.RefObject<HTMLElement>} style={{ padding: "80px 24px", background: "#fff" }}>
             <div style={{ maxWidth: 1100, margin: "0 auto" }}>
                 <div style={{ display: "flex", gap: 48, alignItems: "flex-start", flexWrap: "wrap" }}>
                     {/* Left — form */}
@@ -172,7 +177,17 @@ export function UploadSection({
                                     disabled={isUploading}
                                 />
                                 <span style={{ fontSize: "0.82rem", color: "#64748b", lineHeight: 1.5, paddingTop: 1 }}>
-                                    Send me helpful tips & updates from ExplainMyLetter (optional)
+                                    Send me helpful tips, updates &amp; discounts from ExplainMyLetter (optional)
+                                </span>
+                            </label>
+
+                            {/* Authorisation consent — required */}
+                            <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
+                                <input type="checkbox" required disabled={isUploading} />
+                                <span style={{ fontSize: "0.82rem", color: "#64748b", lineHeight: 1.5, paddingTop: 1 }}>
+                                    <span style={{ color: "#0F233F", fontWeight: 700 }}>I confirm I am authorised to upload this document</span> and
+                                    understand that Explain My Letter provides simplified explanations, <strong>NOT</strong> legal, medical, financial
+                                    or professional advice. <span style={{ color: "#f43f5e" }}>*</span>
                                 </span>
                             </label>
 
@@ -313,7 +328,7 @@ export function UploadSection({
                                     </>
                                 ) : (
                                     <>
-                                        Generate Free Summary{" "}
+                                        Generate Your FREE Summary First - No Commitment{" "}
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                                         </svg>
@@ -335,10 +350,12 @@ export function UploadSection({
                                         <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
                                         <polyline points="17 6 23 6 23 12" />
                                     </svg>{" "}
-                                    Deleted in 24h
+                                    Deleted Within 24hr
                                 </span>
                                 <span style={{ color: "#e2e8f0" }}>·</span>
                                 <span className="trust-item">GDPR Compliant</span>
+                                <span style={{ color: "#e2e8f0" }}>·</span>
+                                <span className="trust-item">Built for UK Letters</span>
                             </div>
                         </form>
                     </div>
@@ -374,7 +391,7 @@ export function UploadSection({
 
                             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 28 }}>
                                 {[
-                                    "AI reads your letter instantly",
+                                    "Our system reads your letter instantly",
                                     "100-130 word plain-English summary",
                                     "Urgency rating: Routine / Important / Time-Sensitive",
                                     "No sign-up required",

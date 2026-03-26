@@ -9,7 +9,7 @@ export function CTABanner({ onScrollToUpload }: CTABannerProps) {
                 <h2 style={{ fontSize: "2.4rem", fontWeight: 900, color: "#fff", letterSpacing: "-0.02em", marginBottom: 16, lineHeight: 1.15 }}>
                     Got a letter you
                     <br />
-                    can't understand?
+                    can&apos;t understand?
                 </h2>
                 <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "1rem", marginBottom: 36, lineHeight: 1.6 }}>
                     Upload it now and get a plain-English summary in seconds — free, no account needed.
@@ -33,7 +33,7 @@ export function CTABanner({ onScrollToUpload }: CTABannerProps) {
                         gap: 8,
                     }}
                 >
-                    Try It Free Now →
+                    Upload FREE Here →
                 </button>
             </div>
         </section>
@@ -41,6 +41,14 @@ export function CTABanner({ onScrollToUpload }: CTABannerProps) {
 }
 
 export function Footer() {
+    const footerLinks = [
+        { label: "Privacy Policy", href: "/privacy-policy" },
+        { label: "Terms of Service", href: "/terms-of-service" },
+        { label: "Data Deletion Policy", href: "/data-deletion-policy" },
+        { label: "Cookies Policy", href: "/cookie-policy" },
+        { label: "Contact Us", href: "/contact" },
+    ];
+
     return (
         <footer style={{ background: "#0F233F", padding: "40px 24px 28px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -54,10 +62,10 @@ export function Footer() {
                             </div>
                         </div>
                     </div>
-                    <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-                        {["Privacy Policy", "Terms of Service", "Contact"].map((l) => (
-                            <a key={l} className="nav-link" style={{ fontSize: "0.8rem" }}>
-                                {l}
+                    <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {footerLinks.map((l) => (
+                            <a key={l.label} href={l.href} className="nav-link" style={{ fontSize: "0.8rem" }}>
+                                {l.label}
                             </a>
                         ))}
                     </div>
@@ -74,8 +82,7 @@ export function Footer() {
                 >
                     <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.35)" }}>© 2025 ExplainMyLetter. All rights reserved.</p>
                     <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.25)", maxWidth: 440, textAlign: "right" }}>
-                        AI-generated summaries are for informational purposes only and do not constitute legal, financial, medical, or professional
-                        advice.
+                        Summaries are for informational purposes only and do not constitute legal, financial, medical, or professional advice.
                     </p>
                 </div>
             </div>
