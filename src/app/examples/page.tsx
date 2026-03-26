@@ -13,7 +13,7 @@ export default function ExamplesPage() {
     return (
         <div style={{ paddingTop: "40px", paddingBottom: "40px" }}>
             <ExamplesSection onScrollToUpload={handleRouteToUpload} />
-            <CTABanner onScrollToUpload={handleRouteToUpload} />
+            {/* <CTABanner onScrollToUpload={handleRouteToUpload} /> */}
         </div>
     );
 }
