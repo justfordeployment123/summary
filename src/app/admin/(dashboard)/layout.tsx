@@ -1,4 +1,4 @@
-// src/app/admin/layout.tsx
+// src/app/admin/(dashboard)/layout.tsx
 // Notice: NO "use client" directive here!
 
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
