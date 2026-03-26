@@ -31,14 +31,7 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
             />
 
             <div style={{ maxWidth: 780, margin: "0 auto", position: "relative", zIndex: 1 }}>
-                <div className="anim-fadeUp" style={{ marginBottom: 24 }}>
-                    <span className="feature-chip" style={{ background: "rgba(84,214,212,0.15)", color: "#54D6D4" }}>
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                            <circle cx="5" cy="5" r="5" />
-                        </svg>
-                        Instant Results · Built for UK Letters
-                    </span>
-                </div>
+               
 
                 <h1
                     className="anim-fadeUp-1 hero-title"
@@ -91,14 +84,14 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                             gap: 8,
                         }}
                     >
-                        Upload FREE Here
+                        Upload your Letter Free
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                         </svg>
                     </button>
                 </div>
 
-                <div className="anim-fadeUp-4 stat-row" style={{ display: "flex", gap: 16, justifyContent: "center" }}>
+                {/* <div className="anim-fadeUp-4 stat-row" style={{ display: "flex", gap: 16, justifyContent: "center" }}>
                     {[
                         { val: "30s", label: "Average summary time" },
                         { val: "4.9★", label: "User satisfaction" },
@@ -109,7 +102,7 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                             <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.55)", marginTop: 6, fontWeight: 600 }}>{s.label}</div>
                         </div>
                     ))}
-                </div>
+                </div> */}
             </div>
         </section>
     );

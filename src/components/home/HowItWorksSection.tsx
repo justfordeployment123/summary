@@ -33,7 +33,19 @@ export function HowItWorksSection() {
             <div style={{ maxWidth: 1100, margin: "0 auto" }}>
                 <div style={{ textAlign: "center", marginBottom: 52 }}>
                     <div className="section-divider" />
-                    <span className="feature-chip" style={{ marginBottom: 14, display: "inline-flex" }}>
+                    <span className="feature-chip" style={{ 
+                        marginBottom: 20, 
+                        display: "inline-flex",
+                        fontSize: "1.1rem",
+                        fontWeight: 800,
+                        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif",
+                        letterSpacing: "0.03em",
+                        color: "#12A1A6",
+                        background: "rgba(18, 161, 166, 0.1)",
+                        padding: "8px 18px",
+                        borderRadius: "8px",
+                        textTransform: "uppercase"
+                    }}>
                         How It Works
                     </span>
                     <h2 style={{ fontSize: "2.2rem", fontWeight: 900, color: "#0F233F", letterSpacing: "-0.02em", marginTop: 10 }}>

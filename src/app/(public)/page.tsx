@@ -1,22 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import {
-    GlobalStyles,
-    Navbar,
-    HeroSection,
-    HowItWorksSection,
-    UploadSection,
-    FAQSection,
-    CTABanner,
-    Footer,
-    SummaryView,
-    CompletedView,
-    WhyChooseUsSection,
-    ExamplesSection,
-    ContactSection,
-    PricingSection,
-} from "@/components/home";
+import { GlobalStyles, HeroSection, UploadSection, SummaryView, CompletedView } from "@/components/home";
 import { PROCESS_STEPS, MAX_POLLS, POLL_INTERVAL } from "@/lib/homeUtils";
 import type { Category, Upsell, SummaryData, CompletedData, ViewState, UrgencyLevel } from "@/types/home";
 
@@ -81,7 +66,6 @@ export default function Home() {
     }, []);
 
     // ── Handle returning Stripe redirect (3D Secure / bank redirect) ──────────
-    // When Stripe redirects back with ?job_id=&token=&returning=1 we resume polling.
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const jobId = params.get("job_id");
@@ -89,7 +73,6 @@ export default function Home() {
         const returning = params.get("returning");
 
         if (jobId && token && returning === "1") {
-            // Restore summary from sessionStorage if available
             const stored = sessionStorage.getItem(`job_${jobId}`);
             if (stored) {
                 try {
@@ -102,7 +85,6 @@ export default function Home() {
             }
             setView("processing_payment");
             startPolling(jobId, token);
-            // Clean up URL params so a refresh doesn't re-trigger
             window.history.replaceState({}, "", window.location.pathname);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -255,7 +237,6 @@ export default function Home() {
             setClientSecret(data.clientSecret);
             setShowPaymentForm(true);
 
-            // Scroll to the payment form
             setTimeout(() => paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
         } catch (err) {
             setIsError(true);
@@ -265,7 +246,6 @@ export default function Home() {
         }
     };
 
-    // Called by EmbeddedPaymentForm on stripe.confirmPayment success
     const handlePaymentSuccess = () => {
         if (!summaryData) return;
         setView("processing_payment");
@@ -277,7 +257,6 @@ export default function Home() {
         setUploadStatus(msg);
     };
 
-    // Hide payment form and go back to options
     const handleHidePaymentForm = () => {
         setShowPaymentForm(false);
         setClientSecret(null);
@@ -375,100 +354,88 @@ export default function Home() {
     return (
         <>
             <GlobalStyles />
-            <div style={{ minHeight: "100vh", fontFamily: "'Raleway',sans-serif" }}>
-                <Navbar onReset={handleReset} onScrollToUpload={scrollToUpload} view={view} />
+            {/* The layout wrapper inside the body handles the font-family and min-height now, 
+                but we'll keep this div to hold the views */}
+            <div>
+                {/* Navbar is now handled globally in src/app/layout.tsx */}
 
-                <div>
-                    {view === "form" && (
-                        <>
-                            <HeroSection onScrollToUpload={scrollToUpload} />
-                            <HowItWorksSection />
-                            <PricingSection onScrollToUpload={scrollToUpload} />
-                            <ExamplesSection onScrollToUpload={scrollToUpload} />
-                            <WhyChooseUsSection />
-                            <UploadSection
-                                formRef={formRef}
-                                categories={categories}
-                                isLoadingCategories={isLoadingCategories}
-                                isUploading={isUploading}
-                                categoryId={categoryId}
-                                setCategoryId={setCategoryId}
-                                setSelectedUpsells={setSelectedUpsells}
-                                firstName={firstName}
-                                setFirstName={setFirstName}
-                                email={email}
-                                setEmail={setEmail}
-                                marketingConsent={marketingConsent}
-                                setMarketingConsent={setMarketingConsent}
-                                file={file}
-                                setFile={setFile}
-                                isDragging={isDragging}
-                                setIsDragging={setIsDragging}
-                                handleDrop={handleDrop}
-                                uploadStatus={uploadStatus}
-                                isError={isError}
-                                currentStep={currentStep}
-                                handleSubmit={handleSubmit}
-                            />
-                            <FAQSection />
-                            <ContactSection />
-                            <CTABanner onScrollToUpload={scrollToUpload} />
-                        </>
-                    )}
+                {view === "form" && (
+                    <div id="upload-section">
+                        <HeroSection onScrollToUpload={scrollToUpload} />
+                        <UploadSection
+                            formRef={formRef}
+                            categories={categories}
+                            isLoadingCategories={isLoadingCategories}
+                            isUploading={isUploading}
+                            categoryId={categoryId}
+                            setCategoryId={setCategoryId}
+                            setSelectedUpsells={setSelectedUpsells}
+                            firstName={firstName}
+                            setFirstName={setFirstName}
+                            email={email}
+                            setEmail={setEmail}
+                            marketingConsent={marketingConsent}
+                            setMarketingConsent={setMarketingConsent}
+                            file={file}
+                            setFile={setFile}
+                            isDragging={isDragging}
+                            setIsDragging={setIsDragging}
+                            handleDrop={handleDrop}
+                            uploadStatus={uploadStatus}
+                            isError={isError}
+                            currentStep={currentStep}
+                            handleSubmit={handleSubmit}
+                        />
+                    </div>
+                )}
 
-                    {/* Summary and payment share the same view condition (processing_payment shows
-              the polling spinner inside SummaryView) */}
-                    {(view === "summary" || view === "processing_payment") && summaryData && (
-                        <div style={{ background: "#f8fafc", minHeight: "calc(100vh - 66px)" }}>
-                            <SummaryView
-                                summaryData={summaryData}
-                                firstName={firstName}
-                                upsells={upsells}
-                                categoryId={categoryId}
-                                selectedUpsells={selectedUpsells}
-                                setSelectedUpsells={setSelectedUpsells}
-                                disclaimerAcknowledged={disclaimerAcknowledged}
-                                setDisclaimerAcknowledged={setDisclaimerAcknowledged}
-                                categories={categories}
-                                getBasePrice={getBasePrice}
-                                getUpsellPrice={getUpsellPrice}
-                                getTotalPrice={getTotalPrice}
-                                // Stripe
-                                clientSecret={clientSecret}
-                                showPaymentForm={showPaymentForm}
-                                isCreatingPaymentIntent={isCreatingPaymentIntent}
-                                isPaymentProcessing={isPaymentProcessing}
-                                setIsPaymentProcessing={setIsPaymentProcessing}
-                                handleProceedToPayment={handleProceedToPayment}
-                                handlePaymentSuccess={handlePaymentSuccess}
-                                handlePaymentError={handlePaymentError}
-                                onHidePaymentForm={handleHidePaymentForm}
-                                // Status
-                                uploadStatus={uploadStatus}
-                                isError={isError}
-                                handleReset={handleReset}
-                                // Refs & view
-                                paymentRef={paymentRef}
-                                view={view}
-                                pollStatus={pollStatus}
-                                pollCount={pollCount}
-                            />
-                        </div>
-                    )}
+                {(view === "summary" || view === "processing_payment") && summaryData && (
+                    <div style={{ background: "#f8fafc", minHeight: "calc(100vh - 66px)" }}>
+                        <SummaryView
+                            summaryData={summaryData}
+                            firstName={firstName}
+                            upsells={upsells}
+                            categoryId={categoryId}
+                            selectedUpsells={selectedUpsells}
+                            setSelectedUpsells={setSelectedUpsells}
+                            disclaimerAcknowledged={disclaimerAcknowledged}
+                            setDisclaimerAcknowledged={setDisclaimerAcknowledged}
+                            categories={categories}
+                            getBasePrice={getBasePrice}
+                            getUpsellPrice={getUpsellPrice}
+                            getTotalPrice={getTotalPrice}
+                            clientSecret={clientSecret}
+                            showPaymentForm={showPaymentForm}
+                            isCreatingPaymentIntent={isCreatingPaymentIntent}
+                            isPaymentProcessing={isPaymentProcessing}
+                            setIsPaymentProcessing={setIsPaymentProcessing}
+                            handleProceedToPayment={handleProceedToPayment}
+                            handlePaymentSuccess={handlePaymentSuccess}
+                            handlePaymentError={handlePaymentError}
+                            onHidePaymentForm={handleHidePaymentForm}
+                            uploadStatus={uploadStatus}
+                            isError={isError}
+                            handleReset={handleReset}
+                            paymentRef={paymentRef}
+                            view={view}
+                            pollStatus={pollStatus}
+                            pollCount={pollCount}
+                        />
+                    </div>
+                )}
 
-                    {view === "completed" && summaryData && completedData && (
-                        <div style={{ background: "#f8fafc", minHeight: "calc(100vh - 66px)" }}>
-                            <CompletedView
-                                summaryData={summaryData}
-                                completedData={completedData}
-                                handleDownload={handleDownload}
-                                handleReset={handleReset}
-                            />
-                        </div>
-                    )}
+                {view === "completed" && summaryData && completedData && (
+                    <div style={{ background: "#f8fafc", minHeight: "calc(100vh - 66px)" }}>
+                        <CompletedView
+                            summaryData={summaryData}
+                            completedData={completedData}
+                            handleDownload={handleDownload}
+                            handleReset={handleReset}
+                        />
+                    </div>
+                )}
 
-                    <Footer />
-                </div>
+                {/* Footer is now handled globally in src/app/layout.tsx */}
             </div>
         </>
     );

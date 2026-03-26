@@ -1,5 +1,5 @@
 export { GlobalStyles } from "./GlobalStyles";
-export { Navbar } from "./Navbar";
+export { Navbar } from "../layout/Navbar";
 export { HeroSection } from "./HeroSection";
 export { HowItWorksSection } from "./HowItWorksSection";
 export { PricingSection } from "./PricingSection";
@@ -8,7 +8,7 @@ export { WhyChooseUsSection } from "./WhyChooseUsSection";
 export { UploadSection } from "./UploadSection";
 export { FAQSection } from "./FAQSection";
 export { ContactSection } from "./ContactSection";
-export { CTABanner, Footer } from "./CTABannerAndFooter";
+export { CTABanner, Footer } from "../layout/CTABannerAndFooter";
 export { SummaryView } from "./SummaryView";
 export { ProcessingView, CompletedView } from "./ResultViews";
 export { EmbeddedPaymentForm } from "./EmbeddedPaymentForm";

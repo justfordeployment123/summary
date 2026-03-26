@@ -1,37 +1,18 @@
-import type { Metadata } from "next";
-import { Raleway } from "next/font/google";
-import "./globals.css";
+import { Navbar } from "@/components/layout/Navbar";
+import { Footer } from "@/components/layout/CTABannerAndFooter"; // Assuming you moved Footer here too
 
-// Configure the Raleway font
-const raleway = Raleway({
-    subsets: ["latin"],
-    weight: ["400", "700"], // Regular and Bold per the design guidelines
-    variable: "--font-raleway",
-    display: "swap",
-});
-
-// Set the metadata for the browser tab using the brand tagline
-export const metadata: Metadata = {
-    title: "ExplainMyLetter",
-    description: "Clarity. Confidence. Next Steps.",
-};
-
-export default function RootLayout({
-    children,
-}: Readonly<{
-    children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en">
-            <body className={`${raleway.variable} font-sans bg-white text-brand-dark antialiased`}>
-                {/* A simple starter Navbar to see the colors in action */}
-                <header className="w-full p-4 border-b border-gray-100 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                        <span className="font-bold text-xl tracking-tight">ExplainMyLetter</span>
-                    </div>
-                </header>
+            <body style={{ minHeight: "100vh", fontFamily: "'Raleway',sans-serif", margin: 0, paddingTop: 66 }}>
+                {/* Navbar is global and stays at the top */}
+                <Navbar />
 
-                <main className="min-h-screen">{children}</main>
+                {/* Page content gets injected here */}
+                <main>{children}</main>
+
+                {/* Footer is global and stays at the bottom */}
+                <Footer />
             </body>
         </html>
     );
