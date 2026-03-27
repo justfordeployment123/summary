@@ -1,6 +1,7 @@
 "use client";
 
 import type { CTABannerProps } from "@/types/home";
+import Link from "next/link";
 
 export function CTABanner({ onScrollToUpload }: CTABannerProps) {
     return (
@@ -46,7 +47,7 @@ export function Footer() {
         { label: "Terms of Service", href: "/terms-of-service" },
         { label: "Data Deletion Policy", href: "/data-deletion-policy" },
         { label: "Cookies Policy", href: "/cookie-policy" },
-        { label: "Contact Us", href: "/contact" },
+        { label: "Contact Us", href: "/contact" }, // Your contact link is right here
     ];
 
     return (
@@ -64,9 +65,21 @@ export function Footer() {
                     </div>
                     <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         {footerLinks.map((l) => (
-                            <a key={l.label} href={l.href} className="nav-link" style={{ fontSize: "0.8rem" }}>
+                            <Link
+                                key={l.label}
+                                href={l.href}
+                                className="nav-link"
+                                style={{
+                                    fontSize: "0.8rem",
+                                    color: "rgba(255,255,255,0.7)",
+                                    textDecoration: "none",
+                                    transition: "color 0.2s",
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.color = "#54D6D4")}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.7)")}
+                            >
                                 {l.label}
-                            </a>
+                            </Link>
                         ))}
                     </div>
                 </div>
