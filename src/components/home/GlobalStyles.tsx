@@ -1,8 +1,8 @@
 "use client";
 
 export function GlobalStyles() {
-  return (
-    <style>{`
+    return (
+        <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500;600;700;800;900&display=swap');
 
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -136,7 +136,7 @@ export function GlobalStyles() {
         background: linear-gradient(135deg, #4FCCD2, #54D6D4);
         opacity: 0; transition: opacity 0.25s;
       }
-      .btn-primary:hover::before { opacity: 1; }
+      .btn-primary:hover::before { opacity: 0.3; }
       .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(18,161,166,0.45); }
       .btn-primary:active { transform: translateY(0); }
       .btn-primary:disabled {
@@ -368,5 +368,5 @@ export function GlobalStyles() {
         font-size: 0.875rem; color: #64748b; line-height: 1.7;
       }
     `}</style>
-  );
+    );
 }
