@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export function CTABanner({ onScrollToUpload }: CTABannerProps) {
     return (
-        <section className="hero-mesh" style={{ padding: "80px 24px", textAlign: "center" }}>
+        <section className="hero-mesh" style={{ padding: "80px 24px", textAlign: "center", background: "linear-gradient(135deg, #0F233F, #1a3a5c)" }}>
             <div style={{ maxWidth: 600, margin: "0 auto", position: "relative", zIndex: 1 }}>
                 <h2 style={{ fontSize: "2.4rem", fontWeight: 900, color: "#fff", letterSpacing: "-0.02em", marginBottom: 16, lineHeight: 1.15 }}>
                     Got a letter you
@@ -15,27 +15,49 @@ export function CTABanner({ onScrollToUpload }: CTABannerProps) {
                 <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "1rem", marginBottom: 36, lineHeight: 1.6 }}>
                     Upload it now and get a plain-English summary in seconds — free, no account needed.
                 </p>
-                <button
-                    onClick={onScrollToUpload}
-                    style={{
-                        padding: "16px 36px",
-                        borderRadius: 14,
-                        background: "#fff",
-                        color: "#12A1A6",
-                        border: "none",
-                        fontFamily: "Raleway,sans-serif",
-                        fontWeight: 900,
-                        fontSize: "1rem",
-                        cursor: "pointer",
-                        boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-                        transition: "all 0.25s",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 8,
-                    }}
-                >
-                    Upload FREE Here →
-                </button>
+
+                <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+                    <button
+                        onClick={onScrollToUpload}
+                        style={{
+                            padding: "15px 32px",
+                            borderRadius: 14,
+                            background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
+                            color: "#fff",
+                            border: "none",
+                            fontFamily: "Raleway,sans-serif",
+                            fontWeight: 800,
+                            fontSize: "1rem",
+                            cursor: "pointer",
+                            boxShadow: "0 6px 24px rgba(18,161,166,0.4)",
+                            transition: "all 0.25s ease",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = "translateY(-2px)";
+                            e.currentTarget.style.boxShadow = "0 10px 32px rgba(18,161,166,0.6)";
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = "translateY(0)";
+                            e.currentTarget.style.boxShadow = "0 6px 24px rgba(18,161,166,0.4)";
+                        }}
+                    >
+                        Upload your Letter Free
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            style={{ transition: "transform 0.2s" }}
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                    </button>
+                </div>
             </div>
         </section>
     );
@@ -43,11 +65,11 @@ export function CTABanner({ onScrollToUpload }: CTABannerProps) {
 
 export function Footer() {
     const footerLinks = [
-        { label: "Privacy Policy", href: "/privacy-policy" },
-        { label: "Terms of Service", href: "/terms-of-service" },
-        { label: "Data Deletion Policy", href: "/data-deletion-policy" },
-        { label: "Cookies Policy", href: "/cookie-policy" },
-        { label: "Contact Us", href: "/contact" }, // Your contact link is right here
+        { label: "Privacy Policy", href: "policies/privacy-policy" },
+        { label: "Terms of Service", href: "policies/terms-of-service" },
+        { label: "Data Deletion Policy", href: "policies/data-deletion-policy" },
+        { label: "Cookies Policy", href: "policies/cookie-policy" },
+        { label: "Contact Us", href: "/contact" },
     ];
 
     return (
