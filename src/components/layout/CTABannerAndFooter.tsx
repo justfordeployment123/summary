@@ -65,10 +65,11 @@ export function CTABanner({ onScrollToUpload }: CTABannerProps) {
 
 export function Footer() {
     const footerLinks = [
-        { label: "Privacy Policy", href: "policies/privacy-policy" },
-        { label: "Terms of Service", href: "policies/terms-of-service" },
-        { label: "Data Deletion Policy", href: "policies/data-deletion-policy" },
-        { label: "Cookies Policy", href: "policies/cookie-policy" },
+        // Added the leading '/' to all policy links
+        { label: "Privacy Policy", href: "/policies/privacy-policy" },
+        { label: "Terms of Service", href: "/policies/terms-of-service" },
+        { label: "Data Deletion Policy", href: "/policies/data-deletion-policy" },
+        { label: "Cookies Policy", href: "/policies/cookie-policy" },
         { label: "Contact Us", href: "/contact" },
     ];
 
