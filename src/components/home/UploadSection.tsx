@@ -40,6 +40,18 @@ export function UploadSection({
         setFile(selectedFile);
     };
 
+    // Data for the comparison table
+    const comparisonData = [
+        { feature: "Identify letter type", free: true, full: true },
+        { feature: "Plain English summary", free: true, full: true },
+        { feature: "Detailed explanation", free: false, full: true },
+        { feature: "Key risks explained", free: false, full: true },
+        { feature: "Important dates highlighted", free: false, full: true },
+        { feature: "What this typically leads to", free: false, full: true },
+        { feature: "Questions to ask", free: false, full: true },
+        { feature: "Possible next steps", free: false, full: true },
+    ];
+
     return (
         <section id="upload" ref={formRef as React.RefObject<HTMLElement>} style={{ padding: "80px 24px", background: "#fff" }}>
             <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -360,90 +372,99 @@ export function UploadSection({
                         </form>
                     </div>
 
-                    {/* Right — feature sidebar */}
-                    <div style={{ flex: "0 0 340px", minWidth: 280 }}>
+                    {/* Right — feature sidebar (Replaced with Table) */}
+                    <div style={{ flex: "0 0 380px", minWidth: 320 }}>
                         <div
                             style={{
-                                padding: "32px",
+                                padding: "32px 24px",
                                 borderRadius: 24,
                                 background: "linear-gradient(135deg,#0F233F,#1a3a5c)",
                                 position: "sticky",
                                 top: 100,
                             }}
                         >
-                            <div style={{ marginBottom: 24 }}>
-                                <div
-                                    style={{
-                                        fontSize: "0.75rem",
-                                        fontWeight: 800,
-                                        color: "#54D6D4",
-                                        letterSpacing: "0.06em",
-                                        textTransform: "uppercase",
-                                        marginBottom: 10,
-                                    }}
-                                >
-                                    Free Summary Includes
-                                </div>
-                                <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "#fff", lineHeight: 1.2 }}>
-                                    Plain-English summary in seconds
-                                </div>
-                            </div>
+                            <h3
+                                style={{
+                                    fontSize: "1.25rem",
+                                    fontWeight: 900,
+                                    color: "#fff",
+                                    textAlign: "center",
+                                    marginBottom: 24,
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                Free Summary vs Full Breakdown
+                            </h3>
 
-                            <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 28 }}>
-                                {[
-                                    "Our system reads your letter instantly",
-                                    "100-130 word plain-English summary",
-                                    "Urgency rating: Routine / Important / Time-Sensitive",
-                                    "No sign-up required",
-                                    "Works on photos of letters",
-                                ].map((f) => (
-                                    <div key={f} className="check-item">
-                                        <div className="check-icon">
-                                            <CheckIcon size={11} />
-                                        </div>
-                                        <span style={{ color: "rgba(255,255,255,0.8)" }}>{f}</span>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 22 }}>
-                                <div
-                                    style={{
-                                        fontSize: "0.75rem",
-                                        fontWeight: 800,
-                                        color: "#54D6D4",
-                                        letterSpacing: "0.06em",
-                                        textTransform: "uppercase",
-                                        marginBottom: 12,
-                                    }}
-                                >
-                                    Full Breakdown Upgrade
-                                </div>
-                                {[
-                                    "Section-by-section structured analysis",
-                                    "Actions & deadlines highlighted",
-                                    "Legal/technical clause explanations",
-                                    "Download as PDF, Word, or Text",
-                                ].map((f) => (
-                                    <div key={f} className="check-item" style={{ marginBottom: 10 }}>
-                                        <div
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ textAlign: "left", paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)" }}></th>
+                                        <th
                                             style={{
-                                                width: 20,
-                                                height: 20,
-                                                borderRadius: "50%",
-                                                background: "rgba(84,214,212,0.2)",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                flexShrink: 0,
+                                                paddingBottom: 16,
+                                                borderBottom: "1px solid rgba(255,255,255,0.1)",
+                                                color: "#54D6D4",
+                                                fontWeight: 800,
+                                                textAlign: "center",
+                                                width: "25%",
                                             }}
                                         >
-                                            <CheckIcon size={11} color="#54D6D4" />
-                                        </div>
-                                        <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.83rem" }}>{f}</span>
-                                    </div>
-                                ))}
-                            </div>
+                                            Free
+                                        </th>
+                                        <th
+                                            style={{
+                                                paddingBottom: 16,
+                                                borderBottom: "1px solid rgba(255,255,255,0.1)",
+                                                color: "#54D6D4",
+                                                fontWeight: 800,
+                                                textAlign: "center",
+                                                width: "25%",
+                                            }}
+                                        >
+                                            Full
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {comparisonData.map((row, i) => (
+                                        <tr key={i}>
+                                            <td
+                                                style={{
+                                                    padding: "14px 0",
+                                                    borderBottom: "1px solid rgba(255,255,255,0.06)",
+                                                    color: "rgba(255,255,255,0.8)",
+                                                    fontWeight: 500,
+                                                }}
+                                            >
+                                                {row.feature}
+                                            </td>
+                                            <td
+                                                style={{
+                                                    padding: "14px 0",
+                                                    borderBottom: "1px solid rgba(255,255,255,0.06)",
+                                                    verticalAlign: "middle",
+                                                }}
+                                            >
+                                                <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                                                    {row.free && <CheckIcon size={16} color="#54D6D4" />}
+                                                </div>
+                                            </td>
+                                            <td
+                                                style={{
+                                                    padding: "14px 0",
+                                                    borderBottom: "1px solid rgba(255,255,255,0.06)",
+                                                    verticalAlign: "middle",
+                                                }}
+                                            >
+                                                <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                                                    {row.full && <CheckIcon size={16} color="#54D6D4" />}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

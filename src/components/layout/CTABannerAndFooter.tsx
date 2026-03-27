@@ -114,7 +114,7 @@ export function Footer() {
                         justifyContent: "space-between",
                         flexWrap: "wrap",
                         gap: 12,
-                    }}
+                    }}  
                 >
                     <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.35)" }}>© 2025 ExplainMyLetter. All rights reserved.</p>
                     <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.25)", maxWidth: 440, textAlign: "right" }}>
