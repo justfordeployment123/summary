@@ -21,7 +21,7 @@ const pricingTiers = [
     },
     {
         name: "Full Breakdown",
-        price: "From £4.99",
+        price: "From £7.99",
         description: "A deeper, section-by-section analysis with actions, deadlines, and next steps.",
         badge: "Most Popular",
         highlight: true,
@@ -232,47 +232,29 @@ export default function PricingPage() {
 
                                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                                         <button
-                                            onClick={handleRouteToUpload}
-                                            className={tier.highlight ? "btn-primary" : ""}
-                                            style={
-                                                !tier.highlight
-                                                    ? {
-                                                          display: "flex",
-                                                          alignItems: "center",
-                                                          justifyContent: "center",
-                                                          gap: 8,
-                                                          width: "100%",
-                                                          padding: "14px 24px",
-                                                          borderRadius: 12,
-                                                          border: "1.5px solid #e2e8f0",
-                                                          background: "#fff",
-                                                          color: "#0F233F",
-                                                          fontFamily: "Raleway,sans-serif",
-                                                          fontWeight: 800,
-                                                          fontSize: "0.95rem",
-                                                          cursor: "pointer",
-                                                          transition: "all 0.2s",
-                                                      }
-                                                    : {
-                                                          width: "100%",
-                                                      }
-                                            }
-                                            onMouseEnter={(e) => {
-                                                if (!tier.highlight) {
-                                                    (e.currentTarget as HTMLButtonElement).style.borderColor = "#54D6D4";
-                                                    (e.currentTarget as HTMLButtonElement).style.color = "#12A1A6";
-                                                    (e.currentTarget as HTMLButtonElement).style.background = "#f0fdfd";
-                                                }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                if (!tier.highlight) {
-                                                    (e.currentTarget as HTMLButtonElement).style.borderColor = "#e2e8f0";
-                                                    (e.currentTarget as HTMLButtonElement).style.color = "#0F233F";
-                                                    (e.currentTarget as HTMLButtonElement).style.background = "#fff";
-                                                }
+                                            style={{
+                                                textAlign: "center",
+                                                padding: "15px 32px",
+                                                borderRadius: 14,
+                                                background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
+                                                color: "#fff",
+                                                border: "none",
+                                                fontFamily: "Raleway,sans-serif",
+                                                fontWeight: 800,
+                                                fontSize: "1rem",
+                                                cursor: "pointer",
+                                                boxShadow: "0 6px 24px rgba(18,161,166,0.4)",
+                                                transition: "all 0.25s",
+                                                display: "flex",
+                                                justifyContent: "center",
+                                                alignItems: "center",
+                                                gap: 8,
                                             }}
                                         >
-                                            {tier.cta} →
+                                            Upload your Letter Free
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                            </svg>
                                         </button>
                                         <p style={{ fontSize: "0.72rem", color: "#94a3b8", textAlign: "center", margin: 0 }}>{tier.ctaNote}</p>
                                     </div>
