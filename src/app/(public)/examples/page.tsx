@@ -110,7 +110,7 @@ export default function ExamplesPage() {
                                 borderRadius: "8px",
                                 textTransform: "uppercase",
                             }}
-                        >
+                    >
                             Examples
                         </span>
                     <h1

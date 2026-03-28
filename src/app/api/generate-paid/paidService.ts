@@ -37,6 +37,22 @@ const DEFAULT_MODEL = "gpt-4.1";
 const COST_PER_1M_INPUT = 2.0;
 const COST_PER_1M_OUTPUT = 8.0;
 
+const MANDATORY_PAID_RULES = `
+
+---
+MANDATORY SYSTEM INSTRUCTIONS (These override any previous instructions):
+1. Do NOT provide legal, financial, or professional advice under any circumstances.
+2. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: [Level]
+3. The [Level] MUST be exactly one of these three words: Routine, Important, or Time-Sensitive.
+4. Do NOT use any colours, HTML, Markdown formatting, or extra text for the urgency label. It must be plain, unformatted text.
+
+URGENCY CLASSIFICATION RULES:
+Determine the urgency level based on the specific instructions provided by the user earlier in this prompt. 
+If, and ONLY if, no specific timeframes or conditions were provided above, use these default rules:
+- Time-Sensitive: Use this if there is ANY specific deadline, due date, or court date mentioned in the text.
+- Important: Use this if there are no strict deadlines, but the issue significantly affects important aspects of the recipient's life, career, finances, or legal standing.
+- Routine: Use this for all other general or informational correspondence.`;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function countWords(text: string): number {
@@ -81,6 +97,8 @@ async function resolvePromptTemplate(
     urgency: string,
     upsellInstructions: string,
 ): Promise<string> {
+    let dbPromptText: string | null = null;
+
     try {
         // 1. Category-specific paid prompt
         if (categoryId) {
@@ -93,37 +111,40 @@ async function resolvePromptTemplate(
                 .lean<{ prompt_text: string }>();
 
             if (categoryPrompt?.prompt_text) {
-                return hydratePlaceholders(categoryPrompt.prompt_text, {
-                    categoryName,
-                    documentText,
-                    urgency,
-                    upsellInstructions,
-                });
+                dbPromptText = categoryPrompt.prompt_text;
             }
         }
 
         // 2. Generic paid prompt
-        const genericPrompt = await Prompt.findOne({
-            category_id: { $exists: false },
-            type: "paid",
-            is_active: true,
-        })
-            .sort({ version: -1 })
-            .lean<{ prompt_text: string }>();
+        if (!dbPromptText) {
+            const genericPrompt = await Prompt.findOne({
+                category_id: { $exists: false },
+                type: "paid",
+                is_active: true,
+            })
+                .sort({ version: -1 })
+                .lean<{ prompt_text: string }>();
 
-        if (genericPrompt?.prompt_text) {
-            return hydratePlaceholders(genericPrompt.prompt_text, {
-                categoryName,
-                documentText,
-                urgency,
-                upsellInstructions,
-            });
+            if (genericPrompt?.prompt_text) {
+                dbPromptText = genericPrompt.prompt_text;
+            }
         }
     } catch (err) {
         console.warn("[generate-paid] Failed to load prompt from DB, using fallback:", err);
     }
 
-    // 3. Hardcoded fallback
+    // 3. If DB prompt found, hydrate it, add upsells, and append mandatory rules
+    if (dbPromptText) {
+        const hydrated = hydratePlaceholders(dbPromptText, {
+            categoryName,
+            documentText,
+            urgency,
+            upsellInstructions,
+        });
+        return hydrated + MANDATORY_PAID_RULES;
+    }
+
+    // 4. Hardcoded fallback
     return buildFallbackPrompt(categoryName, documentText, upsellInstructions);
 }
 
@@ -156,11 +177,11 @@ ${upsellInstructions}
 Rules:
 - Use plain English throughout
 - Highlight deadlines and required actions prominently
-- Do NOT provide legal, financial, or professional advice
 - Be specific and actionable
 
 Document text:
-${documentText}`;
+${documentText}
+${MANDATORY_PAID_RULES}`;
 }
 
 // ─── Upsell instruction builder ───────────────────────────────────────────────
@@ -216,7 +237,9 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
     const category = job.category_id as any;
     const categoryId = category?._id?.toString() ?? null;
     const categoryName = category?.name ?? "General";
-    const urgency = job.urgency ?? "Routine";
+
+    // We use 'let' because the AI might upgrade the urgency during generation
+    let urgency = job.urgency ?? "Routine";
 
     const upsellInstructions = buildUpsellInstructions(upsells);
 
@@ -254,11 +277,20 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
             tokensIn = completion.usage?.prompt_tokens ?? 0;
             tokensOut = completion.usage?.completion_tokens ?? 0;
 
-            if (!validateOutput(rawOutput)) {
+            // ── PARSE AND STRIP URGENCY ──
+            const urgencyMatch = rawOutput.match(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i);
+            if (urgencyMatch) {
+                urgency = urgencyMatch[1]; // Update the local urgency variable
+            }
+
+            // Remove the urgency line entirely from the final text
+            const cleanedBreakdown = rawOutput.replace(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i, "").trim();
+
+            if (!validateOutput(cleanedBreakdown)) {
                 throw new Error(`Output validation failed on attempt ${attempt + 1}`);
             }
 
-            detailedBreakdown = rawOutput;
+            detailedBreakdown = cleanedBreakdown;
             lastError = null;
             break;
         } catch (err: any) {
@@ -301,7 +333,8 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
         previous_state: "PAID_BREAKDOWN_GENERATING",
         state_transitioned_at: new Date(),
         processed_at: new Date(),
-        paid_summary: detailedBreakdown,
+        paid_summary: detailedBreakdown, // Saved completely clean
+        urgency: urgency, // Saved to DB
     });
 
     return { detailedBreakdown };
