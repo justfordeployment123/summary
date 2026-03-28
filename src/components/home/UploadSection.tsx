@@ -59,7 +59,7 @@ export function UploadSection({
                     {/* Left — form */}
                     <div style={{ flex: "1 1 400px", minWidth: 300 }}>
                         <div style={{ marginBottom: 36 }}>
-                            <span className="feature-chip" style={{ marginBottom: 14, display: "inline-flex" }}>
+                            <span className="feature-chip" style={{ marginBottom: 14, fontSize: "1.1rem", display: "inline-flex" }}>
                                 Free Summary
                             </span>
                             <h2
