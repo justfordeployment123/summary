@@ -104,7 +104,7 @@ export default function WhyChooseUsPage() {
                                 lineHeight: 1.2,
                             }}
                         >
-                            Clarity-first, privacy-first
+                            Clear answers. Total privacy.
                         </h1>
                         <p
                             style={{
@@ -137,7 +137,7 @@ export default function WhyChooseUsPage() {
                             animationDelay: "150ms",
                         }}
                     >
-                        <div style={{ flex: 1, minWidth: 240 }}>
+                        <div style={{ flex: 1, minWidth: 240, textAlign: "center" }}>
                             <div
                                 style={{
                                     fontSize: "0.75rem",
@@ -155,7 +155,7 @@ export default function WhyChooseUsPage() {
                                 <strong style={{ color: "#54D6D4" }}>clarity, confidence, and control</strong> over what comes next.
                             </p>
                         </div>
-                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        {/* <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                             {["Secure & Encrypted", "Auto-Deleted in 24hr", "No Data Resale", "UK GDPR Focused"].map((tag) => (
                                 <div
                                     key={tag}
@@ -174,7 +174,7 @@ export default function WhyChooseUsPage() {
                                     ✓ {tag}
                                 </div>
                             ))}
-                        </div>
+                        </div> */}
                     </div>
 
                     {/* Feature grid */}
