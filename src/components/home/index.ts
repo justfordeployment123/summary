@@ -1,7 +1,6 @@
 export { GlobalStyles } from "./GlobalStyles";
 export { Navbar } from "../layout/Navbar";
 export { HeroSection } from "./HeroSection";
-export { HowItWorksSection } from "./HowItWorksSection";
 export { UploadSection } from "./UploadSection";
 export { CTABanner, Footer } from "../layout/CTABannerAndFooter";
 export { SummaryView } from "./SummaryView";
