@@ -25,16 +25,16 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const INPUT_WORD_HARD_CAP    = 1200;
+const INPUT_WORD_HARD_CAP = 1200;
 const FREE_SUMMARY_MIN_WORDS = 100;
 const FREE_SUMMARY_MAX_WORDS = 130;
-const MAX_RETRIES            = 3;
-const BACKOFF_DELAYS         = [0, 2000, 5000]; // ms before each attempt
+const MAX_RETRIES = 3;
+const BACKOFF_DELAYS = [0, 2000, 5000]; // ms before each attempt
 const DEFAULT_MAX_OUTPUT_TOKENS = 300;
-const DEFAULT_MAX_INPUT_TOKENS  = 2000;
-const DEFAULT_MODEL             = "gpt-4.1";
+const DEFAULT_MAX_INPUT_TOKENS = 2000;
+const DEFAULT_MODEL = "gpt-4.1";
 // GPT-4.1 pricing (per 1M tokens, USD) — used for cost estimation §9.1
-const COST_PER_1M_INPUT  = 2.0;
+const COST_PER_1M_INPUT = 2.0;
 const COST_PER_1M_OUTPUT = 8.0;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -50,8 +50,7 @@ function truncateToWordCap(text: string, cap: number): string {
 }
 
 function estimateCost(tokensIn: number, tokensOut: number): number {
-    return (tokensIn / 1_000_000) * COST_PER_1M_INPUT +
-           (tokensOut / 1_000_000) * COST_PER_1M_OUTPUT;
+    return (tokensIn / 1_000_000) * COST_PER_1M_INPUT + (tokensOut / 1_000_000) * COST_PER_1M_OUTPUT;
 }
 
 function validateAIOutput(text: string): boolean {
@@ -77,11 +76,23 @@ async function sleep(ms: number) {
 //   {{category}}      → categoryName
 //   {{urgency}}       → not used in free prompts (urgency is OUTPUT, not input)
 
-async function resolvePromptTemplate(
-    categoryId: string | null,
-    categoryName: string,
-    documentText: string,
-): Promise<string> {
+// Add this near your other constants at the top of the file
+const MANDATORY_URGENCY_RULES = `
+
+---
+MANDATORY SYSTEM INSTRUCTIONS (These override any previous instructions):
+1. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: Routine
+2. Replace "Routine" with "Important" if there are deadlines within 30 days.
+3. Replace "Routine" with "Time-Sensitive" if action is required within 7 days or a court date is mentioned.
+4. Do NOT use any colours, HTML, Markdown formatting, or extra text for the urgency label. It must be plain text.`;
+
+// ... [Keep your existing helpers like countWords, hydratePlaceholders, etc.] ...
+
+// ─── DB Prompt Lookup (§10.2) ─────────────────────────────────────────────────
+
+async function resolvePromptTemplate(categoryId: string | null, categoryName: string, documentText: string): Promise<string> {
+    let dbPromptText: string | null = null;
+
     try {
         // 1. Try category-specific prompt first
         if (categoryId) {
@@ -94,57 +105,61 @@ async function resolvePromptTemplate(
                 .lean<{ prompt_text: string }>();
 
             if (categoryPrompt?.prompt_text) {
-                return hydratePlaceholders(categoryPrompt.prompt_text, { categoryName, documentText });
+                dbPromptText = categoryPrompt.prompt_text;
             }
         }
 
-        // 2. Try generic prompt (no category_id set)
-        const genericPrompt = await Prompt.findOne({
-            category_id: { $exists: false },
-            type: "free",
-            is_active: true,
-        })
-            .sort({ version: -1 })
-            .lean<{ prompt_text: string }>();
+        // 2. Try generic prompt (no category_id set) if category specific wasn't found
+        if (!dbPromptText) {
+            const genericPrompt = await Prompt.findOne({
+                category_id: { $exists: false },
+                type: "free",
+                is_active: true,
+            })
+                .sort({ version: -1 })
+                .lean<{ prompt_text: string }>();
 
-        if (genericPrompt?.prompt_text) {
-            return hydratePlaceholders(genericPrompt.prompt_text, { categoryName, documentText });
+            if (genericPrompt?.prompt_text) {
+                dbPromptText = genericPrompt.prompt_text;
+            }
         }
     } catch (err) {
         // Log but don't block — fall through to hardcoded default
         console.warn("[generate-free] Failed to load prompt from DB, using fallback:", err);
     }
 
-    // 3. Hardcoded fallback (used when no DB prompt exists yet)
+    // 3. If a DB prompt was found, hydrate it and append the mandatory rules
+    if (dbPromptText) {
+        const hydratedPrompt = hydratePlaceholders(dbPromptText, { categoryName, documentText });
+        return hydratedPrompt + MANDATORY_URGENCY_RULES;
+    }
+
+    // 4. Hardcoded fallback (used when no DB prompt exists yet)
     return buildFallbackPrompt(categoryName, documentText);
 }
 
-function hydratePlaceholders(
-    template: string,
-    vars: { categoryName: string; documentText: string },
-): string {
-    return template
-        .replace(/\{\{document_text\}\}/g, vars.documentText)
-        .replace(/\{\{category\}\}/g, vars.categoryName);
+function hydratePlaceholders(template: string, vars: { categoryName: string; documentText: string }): string {
+    return template.replace(/\{\{document_text\}\}/g, vars.documentText).replace(/\{\{category\}\}/g, vars.categoryName);
 }
 
 function buildFallbackPrompt(categoryName: string, documentText: string): string {
+    // The fallback already has the correct instructions built-in, but we can standardise
+    // it to match the logic of the mandatory rules just to be safe.
     return `You are a plain-English document simplifier.
 The user has uploaded a ${categoryName} letter.
 
-Summarise the letter in EXACTLY 100-130 words of plain English. Include an urgency classification at the end on its own line in this exact format: URGENCY: Routine|Important|Time-Sensitive
+Summarise the letter in EXACTLY 100-130 words of plain English. 
 
 Rules:
 - No more than 130 words, no fewer than 100 words
 - Plain English only — no jargon, no legal language
 - Be specific about what the letter says and what the recipient needs to know
 - Do NOT include professional advice
-- End with: URGENCY: [level]
 
 Document text:
-${documentText}`;
+${documentText}
+${MANDATORY_URGENCY_RULES}`;
 }
-
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
@@ -155,10 +170,7 @@ export async function POST(req: Request) {
         const { jobId, extractedText } = body;
 
         if (!jobId || !extractedText) {
-            return NextResponse.json(
-                { error: "Missing required fields: jobId, extractedText." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "Missing required fields: jobId, extractedText." }, { status: 400 });
         }
 
         // ── 1. Validate job exists and is in the right state ──
@@ -173,10 +185,7 @@ export async function POST(req: Request) {
         // ── 2. Check global monthly token cap (§9.2) ──
         const capResult = await checkAndIncrementMonthlyUsage(0);
         if (!capResult.allowed) {
-            return NextResponse.json(
-                { error: "Service temporarily unavailable. Please try again later." },
-                { status: 503 },
-            );
+            return NextResponse.json({ error: "Service temporarily unavailable. Please try again later." }, { status: 503 });
         }
 
         // ── 3. Fetch configurable settings ──
@@ -187,15 +196,15 @@ export async function POST(req: Request) {
         ]);
 
         const maxOutputTokens: number = maxOutputTokensSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
-        const wordCap: number         = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
-        const model: string           = modelSetting?.value ?? DEFAULT_MODEL;
+        const wordCap: number = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
+        const model: string = modelSetting?.value ?? DEFAULT_MODEL;
 
         // ── 4. Enforce 1,200-word hard cap on input (§9.1) ──
         const truncatedText = truncateToWordCap(extractedText, wordCap);
 
         // ── 5. Resolve prompt from DB (§10.2), fall back to hardcoded if none ──
-        const category     = job.category_id as any;
-        const categoryId   = category?._id?.toString() ?? null;
+        const category = job.category_id as any;
+        const categoryId = category?._id?.toString() ?? null;
         const categoryName = category?.name ?? "General";
 
         const prompt = await resolvePromptTemplate(categoryId, categoryName, truncatedText);
@@ -209,8 +218,8 @@ export async function POST(req: Request) {
 
         // ── 7. Retry loop with backoff (§8.1) ──
         let lastError: Error | null = null;
-        let summary  = "";
-        let urgency  = "Routine";
+        let summary = "";
+        let urgency = "Routine";
         let tokensIn = 0;
         let tokensOut = 0;
 
@@ -228,7 +237,7 @@ export async function POST(req: Request) {
                 });
 
                 const rawOutput = completion.choices[0]?.message?.content ?? "";
-                tokensIn  = completion.usage?.prompt_tokens ?? 0;
+                tokensIn = completion.usage?.prompt_tokens ?? 0;
                 tokensOut = completion.usage?.completion_tokens ?? 0;
 
                 // ── 8. Parse urgency from output ──
@@ -238,9 +247,7 @@ export async function POST(req: Request) {
 
                 // ── 9. Validate output (§8.1) ──
                 if (!validateAIOutput(summary)) {
-                    throw new Error(
-                        `AI output failed validation on attempt ${attempt + 1}. Word count: ${countWords(summary)}`,
-                    );
+                    throw new Error(`AI output failed validation on attempt ${attempt + 1}. Word count: ${countWords(summary)}`);
                 }
 
                 // Enforce strict word cap on output
@@ -265,10 +272,7 @@ export async function POST(req: Request) {
                 previous_state: JobState.FREE_SUMMARY_GENERATING,
                 state_transitioned_at: new Date(),
             });
-            return NextResponse.json(
-                { error: "Failed to generate AI summary. Please try again." },
-                { status: 502 },
-            );
+            return NextResponse.json({ error: "Failed to generate AI summary. Please try again." }, { status: 502 });
         }
 
         // ── 11. Log token usage & cost (§9.1) ──
@@ -300,9 +304,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ summary, urgency });
     } catch (error: any) {
         console.error("[generate-free]", error);
-        return NextResponse.json(
-            { error: error.message || "Internal server error." },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: error.message || "Internal server error." }, { status: 500 });
     }
 }

@@ -143,7 +143,7 @@ export function UploadSection({
                                             marginBottom: 8,
                                         }}
                                     >
-                                        First Name <span style={{ color: "#f43f5e" }}>*</span>
+                                        Full Name <span style={{ color: "#f43f5e" }}>*</span>
                                     </label>
                                     <input
                                         type="text"
