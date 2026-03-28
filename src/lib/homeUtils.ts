@@ -37,95 +37,154 @@ export const POLL_INTERVAL = 3000;
 export function formatPrice(pence: number): string {
     return `£${(pence / 100).toFixed(2)}`;
 }
-
+/**
+ * markdownToHtml — Vertical "Single-Flow" Edition
+ * Optimized for readability, large typography, and a cohesive vertical timeline feel.
+ */
+/**
+ * markdownToHtml — Vertical "Premium Document" Edition
+ * Featuring high-contrast, oversized headings and a cohesive vertical flow.
+ */
 export function markdownToHtml(md: string): string {
     if (!md) return "";
+
     const lines = md.split("\n");
     const out: string[] = [];
-    let inUl = false,
-        inOl = false;
 
-    const closeList = () => {
-        if (inUl) {
-            out.push("</ul>");
-            inUl = false;
-        }
-        if (inOl) {
-            out.push("</ol>");
-            inOl = false;
-        }
-    };
-
-    const parseLine = (line: string) =>
-        line
+    const inline = (s: string) =>
+        s
             .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
             .replace(/\*(.+?)\*/g, "<em>$1</em>")
-            .replace(/`(.+?)`/g, "<code>$1</code>");
+            .replace(/`(.+?)`/g, `<code style="background:#f1f5f9;border-radius:4px;padding:2px 6px;font-size:0.9em;color:#0F233F">$1</code>`);
 
-    for (const raw of lines) {
+    // ── Main Document Container ──────────────────────────────────────────────
+    out.push(`
+      <div style="
+        font-family: 'Raleway', 'Helvetica Neue', sans-serif;
+        max-width: 850px;
+        margin: 0 auto;
+        padding: 60px 32px;
+        color: #1e293b;
+        background: #ffffff;
+        line-height: 1.8;
+      ">
+    `);
+
+    for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i];
         const line = raw.trimEnd();
 
-        if (/^---+$/.test(line.trim())) {
-            closeList();
-            out.push('<hr style="border:none;border-top:1px solid #e2e8f0;margin:1.5rem 0"/>');
+        if (line.trim() === "") {
+            out.push(`<div style="height:20px"></div>`);
             continue;
         }
+
+        // ── ## Major Section Heading (Larger & Darker) ─────────────────────
         const h2 = line.match(/^##\s+(.*)/);
         if (h2) {
-            closeList();
-            out.push(
-                `<h2 style="font-family:Raleway,sans-serif;font-size:1.1rem;font-weight:700;color:#0F233F;margin:1.5rem 0 0.5rem">${parseLine(h2[1])}</h2>`,
-            );
+            out.push(`
+              <div style="margin: 56px 0 28px 0; border-bottom: 3px solid #f1f5f9; padding-bottom: 16px;">
+                <h2 style="
+                  font-size: 2.25rem; 
+                  font-weight: 900; 
+                  color: #08121f; 
+                  margin: 0; 
+                  letter-spacing: -0.03em;
+                  line-height: 1.2;
+                  display: flex;
+                  align-items: center;
+                  gap: 16px;
+                ">
+                  <span style="width: 6px; height: 38px; background: #12A1A6; border-radius: 4px; display: inline-block;"></span>
+                  ${inline(h2[1])}
+                </h2>
+              </div>
+            `);
             continue;
         }
 
+        // ── ### Sub-heading (Darker & Bold) ─────────────────────────────────
         const h3 = line.match(/^###\s+(.*)/);
         if (h3) {
-            closeList();
-            out.push(
-                `<h3 style="font-family:Raleway,sans-serif;font-size:1rem;font-weight:600;color:#12A1A6;margin:1.2rem 0 0.4rem">${parseLine(h3[1])}</h3>`,
-            );
+            out.push(`
+              <h3 style="
+                font-size: 1.6rem; 
+                font-weight: 800; 
+                color: #0F233F; 
+                margin: 40px 0 16px 0;
+                letter-spacing: -0.01em;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              ">
+                <span style="color: #12A1A6;">▸</span> ${inline(h3[1])}
+              </h3>
+            `);
             continue;
         }
 
-        const ul = line.match(/^[-*]\s+(.*)/);
-        if (ul) {
-            if (inOl) {
-                out.push("</ol>");
-                inOl = false;
-            }
-            if (!inUl) {
-                out.push('<ul style="padding-left:1.25rem;margin:0.5rem 0;list-style:disc">');
-                inUl = true;
-            }
-            out.push(`<li style="color:#334155;font-size:0.9rem;line-height:1.7;margin-bottom:0.25rem">${parseLine(ul[1])}</li>`);
+        // ── Bullet Lists (Vertical Spine Style) ────────────────────────────
+        const ulMatch = line.match(/^[-*]\s+(.*)/);
+        if (ulMatch) {
+            out.push(`
+              <div style="display: flex; gap: 18px; margin-bottom: 14px; padding-left: 12px;">
+                <div style="display: flex; flex-direction: column; align-items: center; padding-top: 12px;">
+                    <div style="width: 8px; height: 8px; border-radius: 50%; background: #54D6D4; box-shadow: 0 0 0 4px #e0f2f1;"></div>
+                </div>
+                <div style="font-size: 1.15rem; color: #334155;">${inline(ulMatch[1])}</div>
+              </div>
+            `);
             continue;
         }
 
-        const ol = line.match(/^\d+\.\s+(.*)/);
-        if (ol) {
-            if (inUl) {
-                out.push("</ul>");
-                inUl = false;
-            }
-            if (!inOl) {
-                out.push('<ol style="padding-left:1.25rem;margin:0.5rem 0;list-style:decimal">');
-                inOl = true;
-            }
-            out.push(`<li style="color:#334155;font-size:0.9rem;line-height:1.7;margin-bottom:0.25rem">${parseLine(ol[1])}</li>`);
+        // ── Ordered Steps (Vertical Card Style) ─────────────────────────────
+        const olMatch = line.match(/^(\d+)\.\s+(.*)/);
+        if (olMatch) {
+            out.push(`
+              <div style="display: flex; gap: 24px; margin: 24px 0; background: #fbfcfd; padding: 24px; border-radius: 16px; border: 1px solid #f1f5f9; border-left: 5px solid #12A1A6;">
+                <div style="
+                    font-size: 1.8rem; font-weight: 900; color: #12A1A6; opacity: 0.3; line-height: 1;
+                ">${olMatch[1]}</div>
+                <div style="font-size: 1.1rem; font-weight: 600; color: #0F233F; line-height: 1.6;">${inline(olMatch[2])}</div>
+              </div>
+            `);
             continue;
         }
 
-        if (line.trim() === "") {
-            closeList();
-            out.push('<div style="height:0.5rem"></div>');
+        // ── **Bold Term** Definition (Vertical focus) ──────────────────────
+        const termLine = line.match(/^\*\*(.+?)\*\*\s*(.*)/);
+        if (termLine) {
+            out.push(`
+              <div style="margin: 28px 0; padding-left: 24px; border-left: 3px solid #f1f5f9;">
+                <div style="font-size: 0.9rem; font-weight: 800; color: #12A1A6; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px;">
+                    ${inline(termLine[1])}
+                </div>
+                <div style="font-size: 1.2rem; color: #1e293b; font-weight: 500;">
+                    ${inline(termLine[2])}
+                </div>
+              </div>
+            `);
             continue;
         }
 
-        closeList();
-        out.push(`<p style="color:#334155;font-size:0.9rem;line-height:1.75;margin:0">${parseLine(line)}</p>`);
+        // ── Default Paragraph ───────────────────────────────────────────────
+        out.push(`
+          <p style="font-size: 1.15rem; color: #334155; margin: 0 0 20px 0; font-weight: 400; line-height: 1.9;">
+            ${inline(line)}
+          </p>
+        `);
     }
 
-    closeList();
+    // ── Disclaimer ──────────────────────────────────────────────────────
+    const footer = out.findIndex((l) => l.toLowerCase().includes("ai-generated"));
+    if (footer !== -1) {
+        out[footer] = `
+          <div style="margin-top: 80px; padding: 30px; background: #f8fafc; border-radius: 12px; font-size: 0.95rem; color: #64748b; line-height: 1.6; text-align: center; border: 1px solid #e2e8f0;">
+            ${out[footer]}
+          </div>
+        `;
+    }
+
+    out.push(`</div>`);
     return out.join("\n");
 }
