@@ -4,37 +4,136 @@ import { useRouter } from "next/navigation";
 
 const examples = [
     {
-        type: "HMRC Tax Letter",
-        badge: "Government",
-        badgeColor: "#4f46e5",
+        type: "Medical / Health",
+        badge: "Medical",
+        badgeColor: "#0f766e",
+        badgeBg: "#ccfbf1",
+        before: "We are writing to inform you that your recent test results have now been reviewed by the relevant department. Based on the findings, no immediate concerns have been identified at this stage. However, as part of ongoing monitoring, you are required to attend a follow-up appointment scheduled for 12 May 2026...",
+        after: "This letter is from St George’s Hospital NHS Trust confirming that your recent test results have been reviewed. No immediate concerns have been identified, but you are invited to a follow-up appointment on 12 May 2026 for ongoing monitoring. While not urgent, it is important to attend or reschedule to ensure continued care.",
+        urgency: "Routine",
+        urgencyColor: "#16a34a",
+        urgencyBg: "#f0fdf4",
+    },
+    {
+        type: "Money Owed",
+        badge: "Utilities",
+        badgeColor: "#4338ca",
         badgeBg: "#e0e7ff",
-        before: "We are writing to inform you that your Self Assessment tax return for the year ending 5 April 2024 has been selected for review under Section 9A of the Taxes Management Act 1970. You are required to provide the documentation listed in Schedule 1 within 30 days of the date of this notice...",
-        after: "HMRC wants to check your 2024 tax return. You have 30 days from this letter to send them documents they've listed. This is a compliance check — not a charge. You should gather the paperwork and respond by the deadline to avoid penalties.",
+        before: "We are writing regarding your British Gas account, which currently shows an outstanding balance of £482.17. This amount is now overdue. We require payment within 7 days of the date of this letter. Failure to make payment or contact us may result in further action being taken on your account.",
+        after: "British Gas is requesting payment of £482.17 for overdue energy bills. You have 7 days to pay or get in touch. This letter indicates the matter is serious; failing to respond may lead to further recovery action. You should review your bill and contact them immediately to discuss payment options and prevent escalation.",
         urgency: "Time-Sensitive",
         urgencyColor: "#dc2626",
         urgencyBg: "#fff1f2",
     },
     {
-        type: "NHS Appointment Letter",
-        badge: "Medical",
-        badgeColor: "#0f766e",
-        badgeBg: "#ccfbf1",
-        before: "Dear Patient, Following your referral from your GP, we are pleased to offer you an outpatient appointment at the Department of Cardiology. Please note that failure to attend without prior notification may result in your referral being discharged back to your GP...",
-        after: "You have a cardiology appointment from your GP referral. You must attend or cancel in advance — if you miss it without telling them, they may remove you from the waiting list and refer you back to your GP, meaning you would need to start again.",
+        type: "Court / Legal",
+        badge: "Legal",
+        badgeColor: "#be123c",
+        badgeBg: "#fff1f2",
+        before: "You are hereby notified that a claim has been issued against you in the County Court Business Centre for the sum of £1,250. You must respond to this claim within 14 days of service. Failure to respond may result in judgment being entered against you without further notice.",
+        after: "The County Court Business Centre has issued a formal legal claim against you for £1,250. You must respond within 14 days. This is a formal legal step, not a warning. If you ignore it, a default judgment may be registered against you, affecting your credit. You should review the claim details and decide on your legal response quickly.",
+        urgency: "Time-Sensitive",
+        urgencyColor: "#dc2626",
+        urgencyBg: "#fff1f2",
+    },
+    {
+        type: "Employment",
+        badge: "Work",
+        badgeColor: "#92400e",
+        badgeBg: "#fef3c7",
+        before: "We are writing to invite you to attend a disciplinary meeting regarding concerns relating to your attendance. The meeting will take place on 5 April 2026. Please note this forms part of a formal process. You have the right to be accompanied by a colleague or representative.",
+        after: "Tesco PLC is inviting you to a formal disciplinary meeting on 5 April 2026 regarding your attendance record. While no final decision has been made, this is a formal HR process. You have the right to bring a colleague or union representative. You should prepare your response to the concerns raised before attending the meeting.",
         urgency: "Important",
         urgencyColor: "#b45309",
         urgencyBg: "#fef3c7",
     },
     {
-        type: "Council Enforcement Notice",
-        badge: "Legal",
-        badgeColor: "#be123c",
-        badgeBg: "#fff1f2",
-        before: "Notice is hereby given pursuant to Section 179 of the Town and Country Planning Act 1990 that the Local Planning Authority is satisfied that there has been a breach of planning control and that it is expedient to issue this Enforcement Notice...",
-        after: "The council believes planning rules have been broken on your property. This is a formal legal notice under planning law. You have the right to appeal, but there is a strict deadline. You should read the full notice carefully and consider speaking to a planning professional.",
+        type: "Insurance",
+        badge: "Finance",
+        badgeColor: "#0369a1",
+        badgeBg: "#e0f2fe",
+        before: "Following our review of your claim, we are pleased to confirm that part of your claim has been approved. A payment of £1,200 will be issued. However, certain elements of your claim have not been accepted as they fall outside the terms and conditions of your policy.",
+        after: "Aviva Insurance has partially approved your claim, authorizing a payment of £1,200. However, other parts of your claim were rejected because they aren't covered by your policy terms. You should review the payment details and the reasons for the partial rejection to decide if you want to request further clarification or appeal the decision.",
+        urgency: "Important",
+        urgencyColor: "#b45309",
+        urgencyBg: "#fef3c7",
+    },
+    {
+        type: "Bank / Financial",
+        badge: "Finance",
+        badgeColor: "#0369a1",
+        badgeBg: "#e0f2fe",
+        before: "We are writing to inform you that your account has exceeded its agreed overdraft limit by £1,150. You are required to take action within 10 days to bring your account back within the authorised limit. Failure to do so may result in further action being taken.",
+        after: "Barclays Bank has notified you that your account is £1,150 over its agreed limit. You have 10 days to bring the balance back within the limit or contact them. This is a formal request to resolve the debt; staying over the limit may lead to fees or further banking restrictions. You should review your balance and take action quickly.",
+        urgency: "Important",
+        urgencyColor: "#b45309",
+        urgencyBg: "#fef3c7",
+    },
+    {
+        type: "HMRC / Tax",
+        badge: "Government",
+        badgeColor: "#4f46e5",
+        badgeBg: "#e0e7ff",
+        before: "Our records indicate that you have underpaid tax for the relevant tax year. The outstanding balance of £2,340 is now due. You are required to make payment within 30 days of the date of this notice. Interest or further action may apply if the amount remains unpaid.",
+        after: "HMRC states you owe £2,340 in underpaid tax from a previous year. You must pay within 30 days. This is a formal demand for payment rather than a reminder. If unpaid, HMRC may add interest or start collection proceedings. You should verify the calculation and arrange payment or contact them if you disagree with the amount.",
         urgency: "Time-Sensitive",
         urgencyColor: "#dc2626",
         urgencyBg: "#fff1f2",
+    },
+    {
+        type: "Housing / Rent",
+        badge: "Housing",
+        badgeColor: "#701a75",
+        badgeBg: "#fdf4ff",
+        before: "We are writing to inform you that your rent account is currently in arrears in the sum of £1,800. You are required to make payment or contact us within 14 days. Failure to address this matter may result in further action being taken.",
+        after: "Your housing association has identified £1,800 in rent arrears on your account. You have 14 days to pay or discuss the debt with them. This is a serious notification that could lead to formal legal action if ignored. You should check your rent statements and contact your landlord immediately to agree on a payment plan.",
+        urgency: "Time-Sensitive",
+        urgencyColor: "#dc2626",
+        urgencyBg: "#fff1f2",
+    },
+    {
+        type: "Utility",
+        badge: "Utilities",
+        badgeColor: "#4338ca",
+        badgeBg: "#e0e7ff",
+        before: "Your account currently has an outstanding balance of £265.40. We require payment or contact within 10 days. If we do not hear from you, further action may be taken to recover the amount owed.",
+        after: "Thames Water is requesting payment for an outstanding balance of £265.40. You have 10 days to respond or pay. This follows previous reminders and suggests the company may now move toward formal debt recovery. You should check the accuracy of the bill and make payment or call them to avoid further collection steps.",
+        urgency: "Time-Sensitive",
+        urgencyColor: "#dc2626",
+        urgencyBg: "#fff1f2",
+    },
+    {
+        type: "School / Education",
+        badge: "Education",
+        badgeColor: "#c026d3",
+        badgeBg: "#fdf4ff",
+        before: "We are writing to raise concerns regarding attendance and request that you attend a meeting within 7 days of this letter. This meeting is intended to discuss the situation and agree on next steps.",
+        after: "Harris Academy has requested a meeting within 7 days to discuss concerns about a student's attendance record. This is a formal step intended to understand the situation and create an improvement plan. No final decision has been made, but your attendance is required. You should review the attendance data before the meeting.",
+        urgency: "Important",
+        urgencyColor: "#b45309",
+        urgencyBg: "#fef3c7",
+    },
+    {
+        type: "Benefits / DWP",
+        badge: "Government",
+        badgeColor: "#4f46e5",
+        badgeBg: "#e0e7ff",
+        before: "Following a review of your Universal Credit claim, we have identified an overpayment of £980. You are required to respond within 14 days. This amount may be recoverable, and further action may be taken if no response is received.",
+        after: "The DWP has reviewed your Universal Credit and found you were overpaid by £980. You must respond within 14 days. The DWP typically recovers these funds from future benefits or through other means. You should check your online journal for the breakdown and decide if you need to challenge the decision or arrange repayment.",
+        urgency: "Time-Sensitive",
+        urgencyColor: "#dc2626",
+        urgencyBg: "#fff1f2",
+    },
+    {
+        type: "Contract / Subscription",
+        badge: "Services",
+        badgeColor: "#2563eb",
+        badgeBg: "#eff6ff",
+        before: "Following the early termination of your agreement, a charge of £320 has been applied in accordance with the terms of your contract. This amount is now payable. Please refer to your agreement for further details.",
+        after: "Vodafone UK has applied an early termination fee of £320 because your contract was cancelled before the end of the minimum term. This charge is now due for payment. You should review your original contract terms to confirm the calculation is correct and then arrange for the payment to clear the account balance.",
+        urgency: "Important",
+        urgencyColor: "#b45309",
+        urgencyBg: "#fef3c7",
     },
 ];
 
@@ -96,23 +195,23 @@ export default function ExamplesPage() {
                 {/* Page Header */}
                 <div className="animate-fade-up" style={{ textAlign: "center", marginBottom: 52, animationDelay: "0ms" }}>
                     <span
-                            className="feature-chip"
-                            style={{
-                                marginBottom: 14,
-                                display: "inline-flex",
-                                fontSize: "1.1rem",
-                                fontWeight: 800,
-                                fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif",
-                                letterSpacing: "0.03em",
-                                color: "#12A1A6",
-                                background: "rgba(18, 161, 166, 0.1)",
-                                padding: "8px 18px",
-                                borderRadius: "8px",
-                                textTransform: "uppercase",
-                            }}
+                        className="feature-chip"
+                        style={{
+                            marginBottom: 14,
+                            display: "inline-flex",
+                            fontSize: "1.1rem",
+                            fontWeight: 800,
+                            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif",
+                            letterSpacing: "0.03em",
+                            color: "#12A1A6",
+                            background: "rgba(18, 161, 166, 0.1)",
+                            padding: "8px 18px",
+                            borderRadius: "8px",
+                            textTransform: "uppercase",
+                        }}
                     >
-                            Examples
-                        </span>
+                        Examples
+                    </span>
                     <h1
                         style={{
                             fontSize: "2.8rem",
@@ -267,7 +366,15 @@ export default function ExamplesPage() {
                                                 boxShadow: "0 6px 16px rgba(18,161,166,0.25)",
                                             }}
                                         >
-                                            <svg className="arrow-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+                                            <svg
+                                                className="arrow-icon"
+                                                width="20"
+                                                height="20"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="#fff"
+                                                strokeWidth="3"
+                                            >
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                                             </svg>
                                         </div>
@@ -313,11 +420,11 @@ export default function ExamplesPage() {
 
                 {/* CTA */}
                 <div className="animate-fade-up" style={{ textAlign: "center", marginTop: 56, animationDelay: "600ms" }}>
-                    <button 
-                        onClick={handleRouteToUpload} 
-                        className="btn-primary" 
-                        style={{ 
-                            maxWidth: 360, 
+                    <button
+                        onClick={handleRouteToUpload}
+                        className="btn-primary"
+                        style={{
+                            maxWidth: 360,
                             margin: "0 auto",
                             padding: "16px 32px",
                             borderRadius: 14,
@@ -328,7 +435,7 @@ export default function ExamplesPage() {
                             fontSize: "1rem",
                             cursor: "pointer",
                             boxShadow: "0 8px 24px rgba(18,161,166,0.3)",
-                            transition: "transform 0.2s, box-shadow 0.2s"
+                            transition: "transform 0.2s, box-shadow 0.2s",
                         }}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.transform = "translateY(-2px)";
@@ -341,9 +448,7 @@ export default function ExamplesPage() {
                     >
                         Try It With Your Letter — Free →
                     </button>
-                    <p style={{ fontSize: "0.85rem", color: "#64748b", marginTop: 16, fontWeight: 500 }}>
-                        No sign-up needed · Results in seconds
-                    </p>
+                    <p style={{ fontSize: "0.85rem", color: "#64748b", marginTop: 16, fontWeight: 500 }}>No sign-up needed · Results in seconds</p>
                 </div>
             </div>
         </div>
