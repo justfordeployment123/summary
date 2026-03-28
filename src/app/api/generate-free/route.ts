@@ -80,12 +80,17 @@ async function sleep(ms: number) {
 const MANDATORY_URGENCY_RULES = `
 
 ---
-MANDATORY SYSTEM INSTRUCTIONS (These override any previous instructions):
-1. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: Routine
-2. Replace "Routine" with "Important" if there are deadlines within 30 days.
-3. Replace "Routine" with "Time-Sensitive" if action is required within 7 days or a court date is mentioned.
-4. Do NOT use any colours, HTML, Markdown formatting, or extra text for the urgency label. It must be plain text.`;
+MANDATORY SYSTEM INSTRUCTIONS FOR URGENCY FORMATTING:
+1. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: [Level]
+2. The [Level] MUST be exactly one of these three words: Routine, Important, or Time-Sensitive.
+3. Do NOT use any colours, HTML, Markdown formatting, or extra text for the urgency label. It must be plain, unformatted text.
 
+URGENCY CLASSIFICATION RULES:
+Determine the urgency level based on the specific instructions provided by the user earlier in this prompt. 
+If, and ONLY if, no specific timeframes or conditions were provided above, use these default rules:
+- Time-Sensitive: Use this if there is ANY specific deadline, due date, or court date mentioned in the text.
+- Important: Use this if there are no strict deadlines, but the issue significantly affects important aspects of the recipient's life, career, finances, or legal standing.
+- Routine: Use this for all other general or informational correspondence.`;
 // ... [Keep your existing helpers like countWords, hydratePlaceholders, etc.] ...
 
 // ─── DB Prompt Lookup (§10.2) ─────────────────────────────────────────────────
