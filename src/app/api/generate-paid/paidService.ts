@@ -14,6 +14,7 @@
 //   • AI output validation
 //   • Token usage & cost logging
 //   • Global monthly cap check
+//   • OpenAI model read from Settings DB (openai_model key) — falls back to gpt-4.1
 
 import OpenAI from "openai";
 import connectToDatabase from "@/lib/db";
@@ -32,6 +33,7 @@ const MAX_RETRIES = 3;
 const BACKOFF_DELAYS = [0, 2000, 5000];
 const DEFAULT_MAX_OUTPUT_TOKENS = 2000;
 const DEFAULT_MAX_INPUT_TOKENS = 4000;
+const DEFAULT_MODEL = "gpt-4.1";
 const COST_PER_1M_INPUT = 2.0;
 const COST_PER_1M_OUTPUT = 8.0;
 
@@ -197,13 +199,15 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
     }
 
     // ── 3. Fetch configurable settings ──
-    const [maxOutputSetting, wordCapSetting] = await Promise.all([
+    const [maxOutputSetting, wordCapSetting, modelSetting] = await Promise.all([
         Setting.findOne({ key: "ai_max_output_tokens_paid" }).lean<any>(),
         Setting.findOne({ key: "ai_input_word_cap" }).lean<any>(),
+        Setting.findOne({ key: "openai_model" }).lean<any>(),
     ]);
 
     const maxOutputTokens: number = maxOutputSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
     const wordCap: number = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
+    const model: string = modelSetting?.value ?? DEFAULT_MODEL;
 
     // ── 4. Enforce word cap on input (§9.1) ──
     const truncatedText = truncateToWordCap(extractedText, wordCap);
@@ -240,10 +244,10 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
 
         try {
             const completion = await openai.chat.completions.create({
-                model: "gpt-4.1",
+                model,
                 max_tokens: maxOutputTokens,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.3,
+                temperature: 0.0,
             });
 
             const rawOutput = completion.choices[0]?.message?.content ?? "";
@@ -275,7 +279,7 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
             tokens_in: tokensIn,
             tokens_out: tokensOut,
             cost_estimate: estimateCost(tokensIn, tokensOut),
-            model: "gpt-4.1",
+            model,
             attempt_number: attemptNumber,
         });
         await checkAndIncrementMonthlyUsage(tokensIn + tokensOut);

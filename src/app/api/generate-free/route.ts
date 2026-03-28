@@ -9,6 +9,7 @@
 //   • AI output validation: non-empty, minimum length, valid encoding
 //   • Global monthly token cap check (§9.2)
 //   • Category-specific prompt fetched from DB (§10.2) — falls back to hardcoded default
+//   • OpenAI model read from Settings DB (openai_model key) — falls back to gpt-4.1
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -31,6 +32,7 @@ const MAX_RETRIES            = 3;
 const BACKOFF_DELAYS         = [0, 2000, 5000]; // ms before each attempt
 const DEFAULT_MAX_OUTPUT_TOKENS = 300;
 const DEFAULT_MAX_INPUT_TOKENS  = 2000;
+const DEFAULT_MODEL             = "gpt-4.1";
 // GPT-4.1 pricing (per 1M tokens, USD) — used for cost estimation §9.1
 const COST_PER_1M_INPUT  = 2.0;
 const COST_PER_1M_OUTPUT = 8.0;
@@ -178,13 +180,15 @@ export async function POST(req: Request) {
         }
 
         // ── 3. Fetch configurable settings ──
-        const [maxOutputTokensSetting, wordCapSetting] = await Promise.all([
+        const [maxOutputTokensSetting, wordCapSetting, modelSetting] = await Promise.all([
             Setting.findOne({ key: "ai_max_output_tokens_free" }).lean<any>(),
             Setting.findOne({ key: "ai_input_word_cap" }).lean<any>(),
+            Setting.findOne({ key: "openai_model" }).lean<any>(),
         ]);
 
         const maxOutputTokens: number = maxOutputTokensSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
         const wordCap: number         = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
+        const model: string           = modelSetting?.value ?? DEFAULT_MODEL;
 
         // ── 4. Enforce 1,200-word hard cap on input (§9.1) ──
         const truncatedText = truncateToWordCap(extractedText, wordCap);
@@ -217,7 +221,7 @@ export async function POST(req: Request) {
 
             try {
                 const completion = await openai.chat.completions.create({
-                    model: "gpt-4.1",
+                    model,
                     max_tokens: maxOutputTokens,
                     messages: [{ role: "user", content: prompt }],
                     temperature: 0.3,
@@ -274,7 +278,7 @@ export async function POST(req: Request) {
             tokens_in: tokensIn,
             tokens_out: tokensOut,
             cost_estimate: estimateCost(tokensIn, tokensOut),
-            model: "gpt-4.1",
+            model,
             attempt_number: 1,
         });
 
