@@ -75,9 +75,18 @@ export default function HowItWorksPage() {
                             style={{
                                 marginBottom: 14,
                                 display: "inline-flex",
+                                fontSize: "1.1rem",
+                                fontWeight: 800,
+                                fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif",
+                                letterSpacing: "0.03em",
+                                color: "#12A1A6",
+                                background: "rgba(18, 161, 166, 0.1)",
+                                padding: "8px 18px",
+                                borderRadius: "8px",
+                                textTransform: "uppercase",
                             }}
                         >
-                            How It Works
+                            How it Works
                         </span>
                         <h1
                             style={{

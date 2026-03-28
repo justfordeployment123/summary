@@ -96,14 +96,23 @@ export default function ExamplesPage() {
                 {/* Page Header */}
                 <div className="animate-fade-up" style={{ textAlign: "center", marginBottom: 52, animationDelay: "0ms" }}>
                     <span
-                        className="feature-chip"
-                        style={{
-                            marginBottom: 14,
-                            display: "inline-flex",
-                        }}
-                    >
-                        Examples
-                    </span>
+                            className="feature-chip"
+                            style={{
+                                marginBottom: 14,
+                                display: "inline-flex",
+                                fontSize: "1.1rem",
+                                fontWeight: 800,
+                                fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif",
+                                letterSpacing: "0.03em",
+                                color: "#12A1A6",
+                                background: "rgba(18, 161, 166, 0.1)",
+                                padding: "8px 18px",
+                                borderRadius: "8px",
+                                textTransform: "uppercase",
+                            }}
+                        >
+                            Examples
+                        </span>
                     <h1
                         style={{
                             fontSize: "2.8rem",
