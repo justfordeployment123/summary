@@ -27,7 +27,22 @@ export default function ContactPage() {
             <div style={{ maxWidth: 900, margin: "0 auto" }}>
                 {/* Page Header */}
                 <div className="animate-fade-up" style={{ textAlign: "center", marginBottom: 52, animationDelay: "0ms" }}>
-                    <span className="feature-chip" style={{ marginBottom: 14, display: "inline-flex" }}>
+                    <span
+                        className="feature-chip"
+                        style={{
+                            marginBottom: 14,
+                            display: "inline-flex",
+                            fontSize: "1.1rem",
+                            fontWeight: 800,
+                            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif",
+                            letterSpacing: "0.03em",
+                            color: "#12A1A6",
+                            background: "rgba(18, 161, 166, 0.1)",
+                            padding: "8px 18px",
+                            borderRadius: "8px",
+                            textTransform: "uppercase",
+                        }}
+                    >
                         Support
                     </span>
                     <h1
@@ -173,7 +188,7 @@ export default function ContactPage() {
                     </div>
 
                     {/* Right — contact form */}
-                    <div className="animate-fade-up glass-card" style={{ animationDelay: "300ms" }}>
+                    {/* <div className="animate-fade-up glass-card" style={{ animationDelay: "300ms" }}>
                         <div
                             style={{
                                 padding: "32px",
@@ -344,7 +359,7 @@ export default function ContactPage() {
                                 </p>
                             </form>
                         </div>
-                    </div>
+                    </div> */}
                 </div>
             </div>
         </div>
