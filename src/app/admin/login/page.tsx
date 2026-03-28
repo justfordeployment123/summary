@@ -20,7 +20,7 @@ export default function AdminLogin() {
             // Use the centralized API client
             await adminApi.login(email, password);
             router.push("/admin/dashboard");
-            router.refresh(); // Force layout update
+            // router.refresh(); // Force layout update
         } catch (err: any) {
             setError(err.message || "Login failed. Please try again.");
         } finally {

@@ -33,33 +33,30 @@ export async function POST(request: Request) {
 
         // 4. Generate the JWT
         const token = jwt.sign(
-            { 
-                adminId: admin._id, 
-                email: admin.email, 
-                role: admin.role 
+            {
+                adminId: admin._id,
+                email: admin.email,
+                role: admin.role,
             },
             process.env.JWT_SECRET!,
-            { expiresIn: "8h" } // Session expires in 8 hours
+            { expiresIn: "8h" }, // Session expires in 8 hours
         );
 
         // 5. Create the response and set the HTTP-only cookie
-        const response = NextResponse.json(
-            { message: "Login successful", role: admin.role },
-            { status: 200 }
-        );
+        const response = NextResponse.json({ message: "Login successful", role: admin.role }, { status: 200 });
 
         response.cookies.set({
             name: "admin_token",
             value: token,
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
+            // secure: process.env.NODE_ENV === "production",
+            secure: request.url.startsWith("https"),
+            sameSite: "lax",
             path: "/",
             maxAge: 8 * 60 * 60, // 8 hours in seconds
         });
 
         return response;
-
     } catch (error: any) {
         console.error("Login Error:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
