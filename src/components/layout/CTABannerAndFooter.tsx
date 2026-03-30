@@ -123,6 +123,7 @@ export function Footer() {
                     <button
                         type="button"
                         onClick={() => {
+                            console.log("Triggering Sentry test error...");
                             throw new Error("Sentry Test Error from ExplainMyLetter!");
                         }}
                         style={{ background: "red", color: "white", padding: "10px" }}
