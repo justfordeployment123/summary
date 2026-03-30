@@ -1,5 +1,6 @@
 "use client";
 
+import { markdownToHtml } from "@/lib/homeUtils";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 
@@ -21,13 +22,7 @@ interface Example {
     urgency: string;
     urgencyColor: string;
     urgencyBg: string;
-    breakdown: {
-        urgencyLabel: string;
-        urgencyColor: string;
-        intro: string;
-        sections: BreakdownSection[];
-        keyChecks: string[];
-    };
+    breakdown: string; // raw markdown
 }
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -43,32 +38,68 @@ const examples: Example[] = [
         urgency: "Routine",
         urgencyColor: "#16a34a",
         urgencyBg: "#f0fdf4",
-        breakdown: {
-            urgencyLabel: "Routine",
-            urgencyColor: "#16a34a",
-            intro: "This letter is a routine follow-up from St George's Hospital NHS Trust, confirming that your recent test results have been reviewed and that no immediate concerns have been identified. The wording suggests this is not an emergency, but part of an ongoing process of monitoring your health. The appointment date is 12 May 2026.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "The letter is reassuring rather than alarming. It is not saying that urgent treatment is needed. This type of letter is commonly used when:",
-                    bullets: [
-                        "Routine monitoring is needed",
-                        "Results were reviewed without major concern",
-                        "A follow-up appointment is part of ongoing care",
-                    ],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "See this letter as part of a wider care process rather than a warning. You are not being asked to make a difficult decision straight away, but you are expected to stay engaged. You may want to:",
-                    bullets: ["Attend the appointment as arranged", "Rearrange if the date is not suitable", "Prepare questions about your results"],
-                },
-                {
-                    heading: "If you cannot attend the appointment",
-                    body: "Do not simply miss it. Contact the hospital department as soon as possible and ask to rearrange. Keep a note of the new date once confirmed. This helps avoid delays in your care.",
-                },
-            ],
-            keyChecks: ["Appointment date: 12 May 2026", "Hospital department or consultant name", "Any preparation instructions included"],
-        },
+        breakdown: `This letter is a routine follow-up from St George's Hospital NHS Trust, confirming that your recent test results have been reviewed and that no immediate concerns have been identified. The wording suggests that this is not an emergency or urgent medical development, but part of an ongoing process of monitoring your health.
+
+The appointment date given is 12 May 2026, which means the hospital wants to continue observing your condition or discussing your results in more detail. In many cases, letters like this are sent when results are stable, but the consultant or department still wants to review progress and keep your care on track.
+
+## What this means in practice
+
+At this stage, the letter appears to be reassuring rather than alarming. It is not saying that urgent treatment is needed, and it does not suggest that immediate action is required beyond attending the appointment.
+
+This type of letter is commonly used when:
+
+- Routine monitoring is needed
+- Results were reviewed without major concern
+- A follow-up appointment is being arranged as part of ongoing care
+
+This does not mean the appointment is unimportant. It simply means that, based on what is written, the hospital is continuing with normal follow-up rather than responding to something critical.
+
+## Understanding your position
+
+It is helpful to see this letter as part of a wider care process rather than a warning. You are not being asked to make a difficult decision straight away, but you are expected to stay engaged with the appointment and any ongoing medical review.
+
+Many people receive hospital letters and feel uncertain simply because the wording is formal. In this case, the practical message is that your care is continuing in a routine way.
+
+You may choose to:
+
+- Attend the appointment as arranged
+- Rearrange it if the date is not suitable
+- Prepare any questions you want answered about the results
+
+## If anything is unclear
+
+Even when a letter sounds routine, it is still reasonable to want more clarity. Medical correspondence often confirms what is happening without explaining the detail in everyday language.
+
+You may want to check:
+
+- What the test results actually showed
+- Whether further tests are expected
+- Whether there is anything you should monitor before the appointment
+
+If the wording feels vague, you can raise these points at the appointment or contact the department in advance for clarification.
+
+## If you cannot attend the appointment
+
+If the appointment date is not possible, it is important not to simply miss it. Hospitals usually expect you to either attend or let them know that you need a different date.
+
+A practical approach would be:
+
+- Contact the hospital department as soon as possible
+- Ask to rearrange the appointment
+- Keep a note of the new date and time once confirmed
+
+This helps avoid delays in your care and keeps the process moving smoothly.
+
+## What to do next
+
+To stay on top of the situation, a simple step-by-step approach can help:
+
+1. Check the appointment date, time, and location carefully
+2. Make a note of any symptoms or concerns you want to mention
+3. Attend the appointment or rearrange it if necessary
+4. Keep the letter somewhere safe in case you need the details later
+
+**Key things to check** — The appointment date (12 May 2026), the hospital department or consultant name, and whether any preparation instructions are included.`,
     },
     {
         type: "Money Owed",
@@ -80,36 +111,68 @@ const examples: Example[] = [
         urgency: "Time-Sensitive",
         urgencyColor: "#dc2626",
         urgencyBg: "#fff1f2",
-        breakdown: {
-            urgencyLabel: "Time-Sensitive",
-            urgencyColor: "#dc2626",
-            intro: "This letter is a payment request from British Gas indicating your account has fallen into arrears. The amount is £482.17 with a 7-day deadline — signalling early escalation beyond a standard reminder.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "The situation is still manageable. If the balance remains unpaid, the account may progress to:",
-                    bullets: [
-                        "Additional charges being added",
-                        "Referral to a debt collection process",
-                        "More formal escalation in future communications",
-                    ],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "You are not limited to paying immediately. Companies often expect contact and engagement at this stage. You may choose to:",
-                    bullets: [
-                        "Pay the full amount to resolve the issue",
-                        "Contact British Gas to arrange a repayment plan",
-                        "Check the bill carefully if something seems wrong",
-                    ],
-                },
-                {
-                    heading: "If you're unable to pay right now",
-                    body: "Contact British Gas as soon as possible, explain your situation clearly, and ask about repayment options or support arrangements. This shows willingness to resolve the issue and may prevent further escalation.",
-                },
-            ],
-            keyChecks: ["Total amount owed: £482.17", "Deadline for action: 7 days", "Whether any charges appear incorrect"],
-        },
+        breakdown: `This letter is a payment request from British Gas, indicating that your account has fallen into arrears and now requires attention. While it is not yet a legal notice, the tone and wording suggest that the account is beginning to move beyond a standard reminder and into early escalation.
+
+The amount being requested is £482.17, which relates to unpaid energy bills accumulated over a recent billing period. The key point in this letter is the 7-day deadline, which signals that the company is expecting prompt action and may take further steps if the situation is not addressed.
+
+## What this means in practice
+
+At this stage, the situation is still manageable, but it should not be ignored. This type of letter is usually sent before more serious action is considered.
+
+If the balance remains unpaid, the account may progress to:
+
+- Additional charges being added
+- Referral to a debt collection process
+- More formal escalation in future communications
+
+This does not mean those steps have happened yet, but the letter is indicating that they are possible if no action is taken.
+
+## Understanding your position
+
+It is important to recognise that you are not limited to simply paying immediately. You still have control over how you respond to this situation.
+
+You may choose to:
+
+- Pay the full amount to resolve the issue
+- Contact British Gas to arrange a repayment plan
+- Check the bill carefully if something does not seem right
+
+Many people assume these letters leave no room for flexibility, but in reality, companies often expect contact and engagement at this stage.
+
+## If the amount doesn't look right
+
+Before taking action, it is worth taking a moment to review the details. Billing issues can sometimes arise from estimated readings, missed payments, or overlapping charges.
+
+You should check:
+
+- The billing period covered
+- Whether meter readings were estimated or actual
+- If any charges seem unfamiliar
+
+If anything appears incorrect, you can contact British Gas and ask for clarification before making payment.
+
+## If you're unable to pay right now
+
+If paying the full amount isn't possible, the most important thing is not to ignore the letter. Early communication usually leads to better outcomes.
+
+A practical approach would be:
+
+- Contact British Gas as soon as possible
+- Explain your situation clearly
+- Ask about repayment options or support arrangements
+
+This shows willingness to resolve the issue and may prevent further escalation.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Review the bill carefully to confirm the amount
+2. Decide whether you can pay in full or need support
+3. Contact British Gas before the 7-day deadline
+4. Keep a record of any communication
+
+**Key things to check** — The total amount owed (£482.17), the deadline for action (7 days), and whether any charges appear incorrect.`,
     },
     {
         type: "Court / Legal",
@@ -121,36 +184,68 @@ const examples: Example[] = [
         urgency: "Time-Sensitive",
         urgencyColor: "#dc2626",
         urgencyBg: "#fff1f2",
-        breakdown: {
-            urgencyLabel: "Time-Sensitive",
-            urgencyColor: "#dc2626",
-            intro: "This is a formal court notice from the County Court Business Centre. A claim of £1,250 has been issued against you. This means the matter has already moved into the legal process — the 14-day response deadline is critical.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "The claim is active. If ignored, the matter may progress to:",
-                    bullets: [
-                        "A default judgment being entered against you",
-                        "Loss of the opportunity to challenge the claim",
-                        "Further enforcement action at a later stage",
-                    ],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "Receiving a court claim does not mean you have lost. You still have options — but the deadline matters and action is needed. You may:",
-                    bullets: [
-                        "Accept the claim and deal with the payment",
-                        "Dispute the claim if you believe it is wrong",
-                        "Partially admit the claim and respond accordingly",
-                    ],
-                },
-                {
-                    heading: "If you're unsure how to deal with it",
-                    body: "Read the claim form carefully from start to finish. Gather any related documents or previous correspondence. Consider seeking legal clarification before the deadline expires. You can access free legal advice through Citizens Advice.",
-                },
-            ],
-            keyChecks: ["Amount being claimed: £1,250", "Response deadline: 14 days", "Whether the claim details are accurate"],
-        },
+        breakdown: `This letter is a formal court notice from the County Court Business Centre, confirming that a claim has been issued against you for £1,250. Unlike a warning letter or standard payment reminder, this means the matter has already moved into the legal process and now requires a formal response.
+
+The most important part of the letter is the 14-day response deadline. That deadline is significant because, if no response is made in time, the court may enter judgment against you automatically. The letter is not asking whether you want to respond — it is telling you that you must.
+
+## What this means in practice
+
+At this stage, the claim is active, but it is still at a point where you can respond and take control of how the matter proceeds. The situation is serious, but it has not yet reached the stage where the outcome is fixed.
+
+If the letter is ignored, the matter may progress to:
+
+- A default judgment being entered against you
+- Loss of the opportunity to challenge the claim properly
+- Further enforcement action at a later stage
+
+This does not mean those consequences are immediate, but the letter is making it clear that failing to respond could make the situation significantly harder to deal with.
+
+## Understanding your position
+
+It is important to understand that receiving a court claim does not automatically mean you have lost. You still have options, but the key is acting within the time allowed.
+
+You may choose to:
+
+- Accept the claim and deal with the payment
+- Dispute the claim if you believe it is wrong
+- Partially admit the claim and respond accordingly
+
+Many people feel overwhelmed when they see court language, but the immediate priority is not to panic — it is to recognise that the deadline matters and that action is needed.
+
+## If the claim doesn't look right
+
+Before responding, it is worth checking the claim details carefully. Legal claims can still contain errors, missing information, or figures that you may not agree with.
+
+You should check:
+
+- The name of the claimant
+- The amount being claimed
+- The reason for the claim as stated in the form
+
+If anything seems inaccurate or unfamiliar, that becomes an important point to investigate before deciding how to respond.
+
+## If you're unsure how to deal with it
+
+Court paperwork can feel more intimidating than ordinary letters, especially if you have not seen anything like this before. If you are unsure what the form means or how to reply, it may be sensible to seek legal clarification before the deadline expires.
+
+A practical approach would be:
+
+- Read the claim form carefully from start to finish
+- Gather any related documents or previous correspondence
+- Decide whether you agree, disagree, or partly agree with the claim
+
+This will help you understand your position before taking the next formal step.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Note the response deadline immediately
+2. Review the details of the claim carefully
+3. Gather any documents relevant to the issue
+4. Make sure a response is sent within the required timeframe
+
+**Key things to check** — The amount being claimed (£1,250), the response deadline (14 days), and whether the claim details are accurate.`,
     },
     {
         type: "Employment",
@@ -162,32 +257,68 @@ const examples: Example[] = [
         urgency: "Important",
         urgencyColor: "#b45309",
         urgencyBg: "#fef3c7",
-        breakdown: {
-            urgencyLabel: "Important",
-            urgencyColor: "#b45309",
-            intro: "This letter from Tesco PLC relates to a disciplinary meeting concerning your attendance. It is a formal stage where your explanation will be heard before any decision is made. The meeting is on 5 April 2026 and you may bring a representative.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "No decision has been made yet. This meeting could lead to:",
-                    bullets: ["A formal warning", "Further monitoring of your attendance", "Additional disciplinary action if concerns continue"],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "This is your opportunity to explain your side. Your response matters. You may choose to:",
-                    bullets: [
-                        "Attend and explain your circumstances",
-                        "Bring a colleague or union representative",
-                        "Prepare supporting information beforehand",
-                    ],
-                },
-                {
-                    heading: "How to prepare",
-                    body: "Review your attendance history and make notes about any relevant circumstances — medical, personal, or otherwise. Bring any evidence that supports your explanation. If anything seems inaccurate in the letter, raise it clearly and calmly at the meeting.",
-                },
-            ],
-            keyChecks: ["Meeting date: 5 April 2026", "Your right to bring a representative", "Whether the concerns described are accurate"],
-        },
+        breakdown: `This letter is from Tesco PLC and relates to a disciplinary meeting concerning your attendance. The wording indicates that your employer is raising a formal concern and is now moving the matter into an internal process where your explanation will be heard before any decision is made.
+
+The meeting is scheduled for 5 April 2026, and the letter also confirms that you may bring a representative. That is an important detail because it shows this is not just an informal conversation — it is a formal stage in a workplace procedure.
+
+## What this means in practice
+
+At this point, the letter does not say that a decision has already been made. It is instead giving you notice of the concern and inviting you to respond.
+
+This type of situation could lead to:
+
+- A formal warning
+- Further monitoring of your attendance
+- Additional disciplinary action if concerns continue
+
+This does not mean that one of those outcomes will definitely happen. It means the employer is now at the stage of reviewing the issue seriously and expects your participation in the process.
+
+## Understanding your position
+
+It is important to recognise that this meeting is your opportunity to explain your side of the situation. You are not just being told off — you are being invited into a process where your response matters.
+
+You may choose to:
+
+- Attend the meeting and explain the circumstances
+- Bring a representative with you
+- Prepare supporting information before the meeting
+
+Many employees feel anxious when they receive disciplinary wording, but the key thing here is that the process is not finished. Your preparation and response can influence what happens next.
+
+## If you disagree with the concerns raised
+
+Before the meeting, it is worth reviewing the letter carefully and comparing it with your own understanding of what has happened. Sometimes workplace concerns are based on incomplete information or records that need context.
+
+You should check:
+
+- Whether the attendance concerns are factually accurate
+- Whether there were medical or personal reasons involved
+- Whether any dates or incidents mentioned are incorrect
+
+If something is inaccurate, the meeting gives you a chance to explain that clearly and calmly.
+
+## If you feel unprepared
+
+It is common to feel unsure about what to say in a disciplinary meeting, especially when the wording of the letter feels formal or intimidating. The most helpful approach is usually to prepare a simple and factual explanation in advance.
+
+A practical approach would be:
+
+- Review your attendance history
+- Make notes about any relevant circumstances
+- Bring any evidence that supports your explanation
+
+This helps you present your position more clearly and confidently.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Confirm that you will attend the meeting
+2. Decide whether you want someone to accompany you
+3. Prepare your explanation in advance
+4. Gather any documents or evidence you may need
+
+**Key things to check** — The meeting date (5 April 2026), your right to bring a representative, and whether the concerns described are accurate.`,
     },
     {
         type: "Insurance",
@@ -199,36 +330,68 @@ const examples: Example[] = [
         urgency: "Important",
         urgencyColor: "#b45309",
         urgencyBg: "#fef3c7",
-        breakdown: {
-            urgencyLabel: "Important",
-            urgencyColor: "#b45309",
-            intro: "Aviva Insurance has partially approved your claim and will pay £1,200. Some items were declined because they fall outside policy terms. This does not mean the matter is closed.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "Aviva accepts some responsibility, but limits the payout via policy terms. If you're unhappy with the decision, it may progress to:",
-                    bullets: [
-                        "A request for further explanation from the insurer",
-                        "An internal review or complaint",
-                        "A formal dispute if the issue remains unresolved",
-                    ],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "You do not have to accept the wording at face value. You may choose to:",
-                    bullets: [
-                        "Accept the £1,200 payment as offered",
-                        "Ask Aviva for a clearer explanation of the exclusions",
-                        "Review the policy wording to check how the decision was reached",
-                    ],
-                },
-                {
-                    heading: "If you want to challenge the outcome",
-                    body: "Ask Aviva to explain the exclusions in plain terms. Compare the decision against your policy wording. Provide any extra evidence that may support your claim. This puts you in a better position to decide whether to request a review.",
-                },
-            ],
-            keyChecks: ["Approved payment amount: £1,200", "Which items or losses were declined", "Policy exclusions being relied upon"],
-        },
+        breakdown: `This letter is from Aviva Insurance and confirms that your claim has been partially approved. The insurer has agreed to pay £1,200, but some items or parts of the claim have been declined because they say those elements are not covered under the policy.
+
+The wording suggests that the claim has not been rejected outright, but that Aviva is limiting what it is prepared to pay. This kind of letter usually means the insurer accepts that a valid claim exists, but is relying on specific policy wording to reduce the overall payout.
+
+## What this means in practice
+
+At this stage, the insurer has made a decision, but that does not necessarily mean the matter is closed. You now know which part of the claim has been accepted and which part has not, which gives you a clearer basis for deciding what to do next.
+
+If you are unhappy with the decision, the situation may progress to:
+
+- A request for further explanation from the insurer
+- An internal review or complaint
+- A more formal dispute if the issue remains unresolved
+
+This does not mean you need to challenge it automatically, but the letter is giving you enough information to consider whether the outcome feels fair and accurate.
+
+## Understanding your position
+
+It is important to recognise that you do not simply have to accept the wording at face value if something feels unclear. A partial approval means Aviva has accepted some responsibility, but it is also saying that certain parts fall outside your cover.
+
+You may choose to:
+
+- Accept the £1,200 payment as offered
+- Ask Aviva for a clearer explanation of the exclusions
+- Review the policy wording to see how the decision was reached
+
+Many people find insurance letters frustrating because they refer to policy terms without always explaining them in simple language. That is often where a closer review becomes useful.
+
+## If the decision doesn't look right
+
+Before accepting the outcome, it is worth reviewing the details carefully. Sometimes items are declined because of missing evidence, interpretation of policy wording, or a misunderstanding about what was claimed.
+
+You should check:
+
+- Which specific items were declined
+- What exclusion wording Aviva is relying on
+- Whether any supporting evidence was overlooked
+
+If anything appears incomplete or unclear, you can go back to the insurer and ask for a fuller explanation.
+
+## If you want to challenge the outcome
+
+If you do not agree with the decision, the most useful first step is usually to understand exactly why the insurer has limited the claim. That puts you in a better position to decide whether it is worth challenging.
+
+A practical approach would be:
+
+- Ask Aviva to explain the exclusions in plain terms
+- Compare the decision with your policy wording
+- Provide any extra evidence that may support your claim
+
+This can help you decide whether the decision should stand or whether it is worth asking for a review.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Read the decision carefully from start to finish
+2. Identify which parts of the claim were declined
+3. Check the policy wording that relates to those items
+4. Decide whether to accept the outcome or ask for a review
+
+**Key things to check** — The approved payment amount (£1,200), which items or losses were declined, and the policy exclusions being relied on.`,
     },
     {
         type: "Bank / Financial",
@@ -240,36 +403,68 @@ const examples: Example[] = [
         urgency: "Important",
         urgencyColor: "#b45309",
         urgencyBg: "#fef3c7",
-        breakdown: {
-            urgencyLabel: "Important",
-            urgencyColor: "#b45309",
-            intro: "Barclays Bank has informed you that your account is £1,150 over its agreed overdraft limit. You have 10 days to bring it back within range. This is not yet formal enforcement, but it is moving that way.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "If the balance remains outside agreed limits, the situation may progress to:",
-                    bullets: [
-                        "Additional charges or fees being applied",
-                        "Restrictions being placed on your account",
-                        "Referral to collections or recovery processes",
-                    ],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "You still have options. Banks often expect contact and discussion before escalating. You may choose to:",
-                    bullets: [
-                        "Deposit funds to bring the balance within limits",
-                        "Contact Barclays to discuss a temporary extension",
-                        "Speak to the bank about financial support options",
-                    ],
-                },
-                {
-                    heading: "If you're experiencing financial difficulty",
-                    body: "Contact Barclays as soon as possible. Explain your financial situation and ask about support options or temporary arrangements. Early communication usually leads to better outcomes and can prevent further escalation.",
-                },
-            ],
-            keyChecks: ["Amount over limit: £1,150", "Timeframe given: 10 days", "Any charges or fees already applied"],
-        },
+        breakdown: `This letter is from Barclays Bank, informing you that your account has gone beyond its agreed overdraft limit. The bank is asking you to take action to bring the balance back within the authorised range, and the wording suggests that this is now being treated as a concern rather than a routine fluctuation.
+
+The amount referenced is £1,150 over your agreed limit, and you are being asked to address this within 10 days. This indicates that the bank is expecting relatively prompt action and is beginning to monitor the situation more closely.
+
+## What this means in practice
+
+This is not yet a formal default or enforcement situation, but it is moving in that direction if left unresolved. Banks typically send this type of letter when an account has remained outside agreed limits for longer than expected.
+
+If the situation is not addressed, it may progress to:
+
+- Additional charges or fees being applied
+- Restrictions being placed on your account
+- Referral to collections or recovery processes
+
+This does not mean those actions have already been taken, but the letter is indicating that they may follow if no action is taken.
+
+## Understanding your position
+
+It is important to recognise that you still have options at this stage. The bank is prompting you to act, but it has not yet escalated the matter beyond your control.
+
+You may choose to:
+
+- Deposit funds to bring the balance back within limits
+- Contact Barclays to discuss a temporary extension
+- Speak to the bank about support if you are struggling financially
+
+Many people assume that once they exceed an overdraft, there is little flexibility. In reality, banks often expect customers to make contact and discuss solutions before the situation worsens.
+
+## If something doesn't look right
+
+Before taking action, it is worth reviewing your account activity carefully. Sometimes balances can be affected by unexpected charges, timing of payments, or pending transactions.
+
+You should check:
+
+- Recent transactions and withdrawals
+- Any fees that have been added
+- Whether payments have cleared correctly
+
+If anything appears unclear or incorrect, you can contact Barclays for clarification.
+
+## If you're experiencing financial difficulty
+
+If you are unable to bring the account back within limits straight away, the most important step is to communicate with the bank early.
+
+A practical approach would be:
+
+- Contact Barclays as soon as possible
+- Explain your financial situation
+- Ask about support options or temporary arrangements
+
+This can help prevent further escalation and may give you more manageable options.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Check your current balance and recent activity
+2. Work out how much is needed to return within the limit
+3. Decide whether you can pay or need support
+4. Contact Barclays before the 10-day timeframe
+
+**Key things to check** — The amount over your limit (£1,150), the timeframe given (10 days), and any charges or fees applied.`,
     },
     {
         type: "HMRC / Tax",
@@ -281,32 +476,7 @@ const examples: Example[] = [
         urgency: "Time-Sensitive",
         urgencyColor: "#dc2626",
         urgencyBg: "#fff1f2",
-        breakdown: {
-            urgencyLabel: "Time-Sensitive",
-            urgencyColor: "#dc2626",
-            intro: "HMRC states you have underpaid tax and owe £2,340, due within 30 days. This is a formal demand — the matter has already been reviewed and calculated. It is not yet enforcement, but it should be taken seriously.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "If not addressed, the situation may progress to:",
-                    bullets: ["Interest being added to the amount owed", "Penalties for non-payment", "More formal enforcement measures by HMRC"],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "You have options beyond simply paying immediately. You may choose to:",
-                    bullets: [
-                        "Pay the amount in full",
-                        "Contact HMRC to arrange a payment plan",
-                        "Review the calculation if you believe it is incorrect",
-                    ],
-                },
-                {
-                    heading: "If you're unable to pay",
-                    body: "HMRC often allows structured arrangements if you engage early. Contact HMRC as soon as possible, explain your situation, and ask about a Time to Pay arrangement. This can spread the cost and avoid further escalation.",
-                },
-            ],
-            keyChecks: ["Amount owed: £2,340", "Deadline: 30 days", "Tax year and calculation details"],
-        },
+        breakdown: ``,
     },
     {
         type: "Housing / Rent",
@@ -318,32 +488,68 @@ const examples: Example[] = [
         urgency: "Time-Sensitive",
         urgencyColor: "#dc2626",
         urgencyBg: "#fff1f2",
-        breakdown: {
-            urgencyLabel: "Time-Sensitive",
-            urgencyColor: "#dc2626",
-            intro: "Your housing association has identified £1,800 in rent arrears and is expecting action within 14 days. This is moving beyond a simple reminder and into a formal stage of the process.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "If arrears are not addressed, the situation may progress to:",
-                    bullets: ["Formal legal proceedings", "Possibility of eviction action", "Further escalation of the tenancy issue"],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "Landlords often expect communication and are willing to agree arrangements. You may choose to:",
-                    bullets: [
-                        "Pay some or all of the arrears",
-                        "Contact the landlord to arrange a repayment plan",
-                        "Seek independent housing advice or support",
-                    ],
-                },
-                {
-                    heading: "If you're unable to pay",
-                    body: "Contact the housing association immediately, explain your situation, and request a repayment arrangement. Early engagement demonstrates willingness to resolve the issue and can prevent further escalation.",
-                },
-            ],
-            keyChecks: ["Arrears amount: £1,800", "Timeframe: 14 days", "Any references to legal action in the letter"],
-        },
+        breakdown: `This letter is from HM Revenue & Customs (HMRC), stating that you have underpaid tax for a previous tax year. The amount being requested is £2,340, and you are required to take action within 30 days.
+
+The wording indicates that this is a formal request for payment rather than an informal notice. HMRC letters are typically clear about expectations, and this one suggests that the matter has already been reviewed and calculated.
+
+## What this means in practice
+
+This is a formal financial request from a government authority, and it should be taken seriously. While it is not immediate enforcement, it is a step that can lead to further action if ignored.
+
+If the situation is not addressed, it may progress to:
+
+- Interest being added to the amount owed
+- Penalties for non-payment
+- More formal enforcement measures
+
+This does not mean those steps are happening now, but the letter is indicating that they may follow if no action is taken.
+
+## Understanding your position
+
+It is important to understand that you are not limited to simply paying immediately. You have the opportunity to review the figures and decide how to respond.
+
+You may choose to:
+
+- Pay the amount in full
+- Contact HMRC to arrange a payment plan
+- Review the calculation if you believe it is incorrect
+
+Many people feel pressure when receiving HMRC correspondence, but there is usually room to engage and resolve the situation constructively.
+
+## If the amount doesn't look right
+
+Before making any payment, it is sensible to review how the figure has been calculated. Tax calculations can sometimes be affected by incorrect income details, missing allowances, or outdated information.
+
+You should check:
+
+- The tax year referenced
+- The income figures used
+- Whether any allowances or reliefs are missing
+
+If anything seems incorrect, you can contact HMRC and request a review.
+
+## If you're unable to pay
+
+If paying the full amount is not possible, HMRC often allows structured arrangements if you engage early.
+
+A practical approach would be:
+
+- Contact HMRC as soon as possible
+- Explain your situation
+- Ask about a Time to Pay arrangement
+
+This can help spread the cost and avoid further escalation.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Review the calculation carefully
+2. Confirm whether the amount appears correct
+3. Decide whether to pay or query it
+4. Contact HMRC within the 30-day period
+
+**Key things to check** — The amount owed (£2,340), the deadline (30 days), and the tax year and calculation details.`,
     },
     {
         type: "Utility",
@@ -355,28 +561,66 @@ const examples: Example[] = [
         urgency: "Time-Sensitive",
         urgencyColor: "#dc2626",
         urgencyBg: "#fff1f2",
-        breakdown: {
-            urgencyLabel: "Time-Sensitive",
-            urgencyColor: "#dc2626",
-            intro: "Thames Water is requesting payment of £265.40 within 10 days. This is a billing escalation letter — the account is no longer being treated as a routine overdue balance.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "If the issue is not resolved, it may progress to:",
-                    bullets: ["Further reminders or formal escalation", "Additional charges being applied", "Possible involvement of debt recovery"],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "Service providers are usually expecting engagement rather than immediate escalation. You may choose to:",
-                    bullets: ["Pay the balance in full", "Arrange a payment plan", "Check the bill for accuracy before paying"],
-                },
-                {
-                    heading: "If you're unable to pay",
-                    body: "Contact Thames Water, explain your situation, and ask about payment arrangements. Many providers have support schemes for customers in financial difficulty. Keep a record of all communication.",
-                },
-            ],
-            keyChecks: ["Amount owed: £265.40", "Deadline: 10 days", "Any unusual charges on the bill"],
-        },
+        breakdown: `This letter is from Thames Water, stating that you have an outstanding balance of £265.40 on your account. The company is asking for payment within 10 days, and the wording suggests that the account is being reviewed for further action if unresolved.
+
+## What this means in practice
+
+This is a billing escalation letter rather than an immediate enforcement notice. However, it indicates that the account is no longer being treated as a routine overdue balance.
+
+If the issue is not resolved, it may progress to:
+
+- Further reminders or escalation
+- Additional charges
+- Possible involvement of recovery processes
+
+This does not mean those steps have happened yet, but the letter is indicating that they may follow.
+
+## Understanding your position
+
+You still have control over how to respond. At this stage, service providers are usually expecting engagement rather than immediate escalation.
+
+You may choose to:
+
+- Pay the balance
+- Arrange a payment plan
+- Check the bill for accuracy
+
+Many customers assume that these letters leave no flexibility, but service providers often allow time to resolve the issue if you make contact.
+
+## If the amount doesn't look right
+
+Before paying, it is worth reviewing the details carefully.
+
+You should check:
+
+- The billing period
+- Meter readings
+- Previous payments
+
+If anything appears unclear, you can contact Thames Water to request clarification.
+
+## If you're unable to pay
+
+If paying in full is not possible, it is important to communicate early.
+
+A practical approach would be:
+
+- Contact Thames Water
+- Explain your situation
+- Ask about payment arrangements
+
+This can help prevent escalation and keep the account manageable.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Review the bill
+2. Decide whether to pay or query it
+3. Contact the provider within the timeframe
+4. Keep a record of communication
+
+**Key things to check** — The amount owed (£265.40), the deadline (10 days), and any unusual charges.`,
     },
     {
         type: "School / Education",
@@ -388,36 +632,54 @@ const examples: Example[] = [
         urgency: "Important",
         urgencyColor: "#b45309",
         urgencyBg: "#fef3c7",
-        breakdown: {
-            urgencyLabel: "Important",
-            urgencyColor: "#b45309",
-            intro: "Harris Academy is formally raising concerns about attendance and requesting a meeting within 7 days. This is an early-stage intervention — the school wants a discussion before taking any further steps.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "If the situation continues, it may lead to:",
-                    bullets: [
-                        "Ongoing formal monitoring",
-                        "Further meetings or escalation",
-                        "Involvement of other parties such as the local authority",
-                    ],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "You have the opportunity to explain the situation and provide context before any further action is considered. You may choose to:",
-                    bullets: [
-                        "Attend the meeting and explain the circumstances",
-                        "Provide any supporting evidence",
-                        "Bring any records of valid absences",
-                    ],
-                },
-                {
-                    heading: "How to prepare",
-                    body: "Review attendance records and note any absences that had valid reasons — medical, personal, or otherwise. If anything in the letter appears inaccurate, raise it calmly during the meeting. Going prepared makes a positive impression.",
-                },
-            ],
-            keyChecks: ["Meeting timeframe: 7 days", "Reason for the concern", "Whether any specific dates or incidents are referenced"],
-        },
+        breakdown: `This letter is from Harris Academy, raising concerns about attendance and requesting a meeting within 7 days. The wording suggests that the school is formally monitoring the situation and expects engagement from you.
+
+## What this means in practice
+
+This is an early-stage intervention rather than a disciplinary outcome. The school is identifying a concern and asking for a discussion before taking any further steps.
+
+If the situation continues, it may lead to:
+
+- Ongoing monitoring
+- Further meetings
+- Escalation within school processes
+
+This does not mean action has already been taken, but the letter indicates that the issue is now being treated formally.
+
+## Understanding your position
+
+You have the opportunity to explain the situation and provide context before any further action is considered.
+
+You may choose to:
+
+- Attend the meeting
+- Provide an explanation
+- Submit any supporting evidence
+
+Many education letters are formal in tone, but they are often part of a process designed to resolve issues early.
+
+## If the concerns don't seem accurate
+
+Before attending the meeting, it is helpful to review your understanding of the situation.
+
+You should check:
+
+- Attendance records
+- Any absences that had valid reasons
+- Whether the details in the letter are correct
+
+If anything appears incorrect, you can raise this during the meeting.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Confirm the meeting date
+2. Review attendance history
+3. Prepare your explanation
+4. Attend the meeting
+
+**Key things to check** — The meeting timeframe (7 days), the reason for concern, and any records referenced.`,
     },
     {
         type: "Benefits / DWP",
@@ -429,32 +691,68 @@ const examples: Example[] = [
         urgency: "Time-Sensitive",
         urgencyColor: "#dc2626",
         urgencyBg: "#fff1f2",
-        breakdown: {
-            urgencyLabel: "Time-Sensitive",
-            urgencyColor: "#dc2626",
-            intro: "The DWP has identified an overpayment of £980 on your Universal Credit claim and requires a response within 14 days. This is a formal communication, not a routine update.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "If not addressed, the DWP may proceed with:",
-                    bullets: ["Deductions from future benefit payments", "Requests for repayment arrangements", "Further recovery action"],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "You are not limited to accepting the decision. Many people assume benefit decisions can't be challenged — they often can. You may choose to:",
-                    bullets: [
-                        "Accept the overpayment and arrange repayment",
-                        "Review the decision if you believe it is incorrect",
-                        "Contact the DWP for a full breakdown and explanation",
-                    ],
-                },
-                {
-                    heading: "If you're unable to repay",
-                    body: "Contact the DWP as soon as possible. Explain your financial situation and ask about repayment arrangements or deductions from benefits. Early engagement usually leads to a more manageable outcome.",
-                },
-            ],
-            keyChecks: ["Amount owed: £980", "Deadline: 14 days", "Reason given for the overpayment"],
-        },
+        breakdown: `This letter is from the Department for Work and Pensions (DWP) regarding your Universal Credit claim. It states that an overpayment of £980 has been identified and that action is required within 14 days.
+
+The wording indicates that the DWP believes you have received more than you were entitled to, and they are now seeking to recover that amount. This is a formal communication rather than a routine update.
+
+## What this means in practice
+
+At this stage, the DWP has made a decision about your claim and is now moving into recovery of the overpayment. This does not automatically mean the decision is final or cannot be questioned, but it does mean the issue is now active and requires attention.
+
+If the situation is not addressed, it may progress to:
+
+- Deductions from future benefit payments
+- Requests for repayment arrangements
+- Further recovery action
+
+This does not mean those steps have already started, but the letter is indicating that they are possible if no action is taken.
+
+## Understanding your position
+
+It is important to recognise that you still have options. You are not limited to accepting the decision without question.
+
+You may choose to:
+
+- Accept the overpayment and arrange repayment
+- Review the decision if you believe it is incorrect
+- Contact the DWP for clarification
+
+Many people assume that benefit decisions cannot be challenged, but there is usually a process available if something does not seem right.
+
+## If the decision doesn't look right
+
+Before agreeing to repay anything, it is worth reviewing the details carefully. Overpayments can sometimes occur due to incorrect information, delays in updates, or misunderstandings about entitlement.
+
+You should check:
+
+- The reason given for the overpayment
+- The time period it relates to
+- Whether your circumstances were reported correctly
+
+If anything appears unclear or incorrect, you can contact the DWP and ask for further explanation.
+
+## If you're unable to repay
+
+If paying the full amount is not possible, the most important step is to engage early rather than ignore the letter.
+
+A practical approach would be:
+
+- Contact the DWP as soon as possible
+- Explain your financial situation
+- Ask about repayment arrangements or deductions
+
+This can help ensure that any repayment plan is manageable.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Read the letter carefully to understand the decision
+2. Check whether the overpayment appears accurate
+3. Decide whether to accept or question it
+4. Contact the DWP within the 14-day timeframe
+
+**Key things to check** — The amount owed (£980), the deadline (14 days), and the reason given for the overpayment.`,
     },
     {
         type: "Contract / Subscription",
@@ -466,32 +764,68 @@ const examples: Example[] = [
         urgency: "Important",
         urgencyColor: "#b45309",
         urgencyBg: "#fef3c7",
-        breakdown: {
-            urgencyLabel: "Important",
-            urgencyColor: "#b45309",
-            intro: "Vodafone UK has applied a £320 early termination fee following the cancellation of your contract before the minimum term ended. This is not a penalty for wrongdoing, but a contractual charge.",
-            sections: [
-                {
-                    heading: "What this means in practice",
-                    body: "If the balance is not addressed, it may progress to:",
-                    bullets: ["Further billing notices or reminders", "Account escalation within Vodafone", "Possible referral to debt recovery"],
-                },
-                {
-                    heading: "Understanding your position",
-                    body: "It is reasonable to check whether the charge has been applied correctly. You may choose to:",
-                    bullets: [
-                        "Pay the amount as requested",
-                        "Ask Vodafone to explain how the figure was calculated",
-                        "Review your original contract terms before paying",
-                    ],
-                },
-                {
-                    heading: "If the charge doesn't look right",
-                    body: "Check the length of the original contract, the remaining term at the point of cancellation, and how the £320 has been calculated. Contact Vodafone and ask for a full breakdown. Contracts can include terms that are not immediately obvious.",
-                },
-            ],
-            keyChecks: ["Charge amount: £320", "Contract term and cancellation conditions", "How the fee has been calculated"],
-        },
+        breakdown: `This letter is from Vodafone UK regarding an early termination of your mobile phone contract. It states that a charge of £320 is due because the agreement has been ended before the minimum contract term.
+
+The wording indicates that the charge is based on the terms of your contract, specifically relating to early cancellation. This is not a penalty in the sense of wrongdoing, but a fee linked to the agreement you entered into.
+
+## What this means in practice
+
+At this stage, Vodafone is applying the terms of the contract and requesting payment. This is a common outcome when a contract is ended early, particularly where a fixed-term agreement was in place.
+
+If the situation is not addressed, it may progress to:
+
+- Further billing or reminders
+- Account escalation
+- Possible recovery action
+
+This does not mean those steps have already happened, but the letter is indicating that the balance is now expected.
+
+## Understanding your position
+
+It is important to recognise that you still have the opportunity to review whether the charge has been applied correctly. Not all contract charges are straightforward, and it is reasonable to check the basis of the fee.
+
+You may choose to:
+
+- Pay the amount as requested
+- Ask Vodafone to explain how the figure was calculated
+- Review your contract terms
+
+Many people accept these charges without question, but checking the detail can sometimes highlight areas that need clarification.
+
+## If the charge doesn't look right
+
+Before making payment, it is worth reviewing the contract and the explanation provided.
+
+You should check:
+
+- The length of the original contract
+- The remaining term at the point of cancellation
+- How the £320 charge has been calculated
+
+If anything appears unclear, you can contact Vodafone and ask for a breakdown.
+
+## If you're unsure about the agreement
+
+Contracts can often include terms that are not obvious at first glance. If the wording feels unclear, it may be helpful to ask for clarification rather than assume the charge is fixed.
+
+A practical approach would be:
+
+- Contact Vodafone
+- Ask for a detailed explanation of the charge
+- Request confirmation of the relevant contract terms
+
+This can help you understand whether the amount is accurate.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Review the contract details
+2. Check how the charge has been calculated
+3. Decide whether to accept or query it
+4. Contact Vodafone if clarification is needed
+
+**Key things to check** — The charge amount (£320), the contract term and cancellation conditions, and how the fee has been calculated.`,
     },
 ];
 
@@ -504,9 +838,6 @@ const URGENCY_STYLES: Record<string, { color: string; bg: string }> = {
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
 function BreakdownModal({ example, onClose }: { example: Example; onClose: () => void }) {
-    const { breakdown } = example;
-
-    // Close on Escape
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
             if (e.key === "Escape") onClose();
@@ -515,7 +846,6 @@ function BreakdownModal({ example, onClose }: { example: Example; onClose: () =>
         return () => window.removeEventListener("keydown", handler);
     }, [onClose]);
 
-    // Prevent body scroll
     useEffect(() => {
         document.body.style.overflow = "hidden";
         return () => {
@@ -523,89 +853,72 @@ function BreakdownModal({ example, onClose }: { example: Example; onClose: () =>
         };
     }, []);
 
-    const urgencyDot = breakdown.urgencyColor;
+    const urgencyStyle = URGENCY_STYLES[example.urgency] || URGENCY_STYLES["Routine"];
 
     return (
         <>
             <style>{`
-        @keyframes modalBackdropIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes modalSlideIn {
-          from { opacity: 0; transform: translateY(32px) scale(0.97); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .modal-backdrop {
-          position: fixed;
-          inset: 0;
-          background: rgba(15, 35, 63, 0.55);
-          backdrop-filter: blur(6px);
-          z-index: 1000;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 24px;
-          animation: modalBackdropIn 0.25s ease forwards;
-        }
-        .modal-panel {
-          background: #fff;
-          border-radius: 24px;
-          width: 100%;
-          max-width: 680px;
-          max-height: 88vh;
-          overflow-y: auto;
-          box-shadow: 0 32px 80px rgba(15, 35, 63, 0.18);
-          animation: modalSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          position: relative;
-          scrollbar-width: thin;
-          scrollbar-color: #e2e8f0 transparent;
-        }
-        .modal-panel::-webkit-scrollbar { width: 6px; }
-        .modal-panel::-webkit-scrollbar-track { background: transparent; }
-        .modal-panel::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 999px; }
-        .modal-close-btn {
-          position: sticky;
-          top: 0;
-          float: right;
-          margin: 20px 20px 0 0;
-          z-index: 10;
-        }
-        .modal-close-btn button {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          border: none;
-          background: #f1f5f9;
-          color: #64748b;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: background 0.2s, color 0.2s;
-        }
-        .modal-close-btn button:hover {
-          background: #e2e8f0;
-          color: #0F233F;
-        }
-        .modal-section-card {
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 14px;
-          padding: 20px 22px;
-          margin-bottom: 14px;
-        }
-        .modal-section-card:last-child { margin-bottom: 0; }
-        .key-check-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 10px;
-          padding: 10px 0;
-          border-bottom: 1px solid #f1f5f9;
-        }
-        .key-check-item:last-child { border-bottom: none; padding-bottom: 0; }
-        .key-check-item:first-child { padding-top: 0; }
-      `}</style>
+                @keyframes modalBackdropIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes modalSlideIn {
+                    from { opacity: 0; transform: translateY(32px) scale(0.97); }
+                    to { opacity: 1; transform: translateY(0) scale(1); }
+                }
+                .modal-backdrop {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(15, 35, 63, 0.55);
+                    backdrop-filter: blur(6px);
+                    z-index: 1000;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 24px;
+                    animation: modalBackdropIn 0.25s ease forwards;
+                }
+                .modal-panel {
+                    background: #fff;
+                    border-radius: 24px;
+                    width: 100%;
+                    max-width: 780px;
+                    max-height: 90vh;
+                    overflow-y: auto;
+                    box-shadow: 0 32px 80px rgba(15, 35, 63, 0.18);
+                    animation: modalSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    position: relative;
+                    scrollbar-width: thin;
+                    scrollbar-color: #e2e8f0 transparent;
+                }
+                .modal-panel::-webkit-scrollbar { width: 6px; }
+                .modal-panel::-webkit-scrollbar-track { background: transparent; }
+                .modal-panel::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 999px; }
+                .modal-close-btn {
+                    position: sticky;
+                    top: 0;
+                    float: right;
+                    margin: 20px 20px 0 0;
+                    z-index: 10;
+                }
+                .modal-close-btn button {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50%;
+                    border: none;
+                    background: #f1f5f9;
+                    color: #64748b;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    transition: background 0.2s, color 0.2s;
+                }
+                .modal-close-btn button:hover {
+                    background: #e2e8f0;
+                    color: #0F233F;
+                }
+            `}</style>
 
             <div
                 className="modal-backdrop"
@@ -626,8 +939,8 @@ function BreakdownModal({ example, onClose }: { example: Example; onClose: () =>
                         </button>
                     </div>
 
-                    {/* Header */}
-                    <div style={{ padding: "28px 28px 0" }}>
+                    {/* Header — matches CompletedView style */}
+                    <div style={{ borderLeft: "8px solid #08121f", margin: "28px 28px 0 28px", paddingLeft: 24 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
                             <span
                                 style={{
@@ -652,31 +965,22 @@ function BreakdownModal({ example, onClose }: { example: Example; onClose: () =>
                                     fontWeight: 700,
                                     padding: "5px 13px",
                                     borderRadius: 100,
-                                    background: URGENCY_STYLES[example.urgency]?.bg || "#f0fdf4",
-                                    color: URGENCY_STYLES[example.urgency]?.color || "#16a34a",
-                                    border: `1px solid ${URGENCY_STYLES[example.urgency]?.color || "#16a34a"}30`,
+                                    background: urgencyStyle.bg,
+                                    color: urgencyStyle.color,
+                                    border: `1px solid ${urgencyStyle.color}30`,
                                     letterSpacing: "0.03em",
                                 }}
                             >
-                                <span
-                                    style={{
-                                        width: 7,
-                                        height: 7,
-                                        borderRadius: "50%",
-                                        background: urgencyDot,
-                                        flexShrink: 0,
-                                    }}
-                                />
-                                {breakdown.urgencyLabel}
+                                <span style={{ width: 7, height: 7, borderRadius: "50%", background: urgencyStyle.color, flexShrink: 0 }} />
+                                {example.urgency}
                             </span>
                         </div>
-
                         <h2
                             style={{
                                 fontSize: "1.6rem",
                                 fontWeight: 900,
                                 color: "#0F233F",
-                                margin: "0 0 6px",
+                                margin: "0 0 4px",
                                 letterSpacing: "-0.02em",
                                 lineHeight: 1.25,
                             }}
@@ -690,175 +994,30 @@ function BreakdownModal({ example, onClose }: { example: Example; onClose: () =>
                                 fontWeight: 600,
                                 letterSpacing: "0.04em",
                                 textTransform: "uppercase",
-                                margin: "0 0 20px",
+                                margin: "0 0 0",
                             }}
                         >
                             Full Breakdown
                         </p>
-
-                        {/* Teal divider */}
-                        <div
-                            style={{
-                                height: 3,
-                                borderRadius: 999,
-                                background: "linear-gradient(90deg, #12A1A6, #54D6D4, transparent)",
-                                marginBottom: 24,
-                            }}
-                        />
-
-                        {/* Intro */}
-                        <p
-                            style={{
-                                fontSize: "0.975rem",
-                                color: "#334155",
-                                lineHeight: 1.75,
-                                margin: "0 0 28px",
-                                fontWeight: 500,
-                            }}
-                        >
-                            {breakdown.intro}
-                        </p>
                     </div>
 
-                    {/* Sections */}
-                    <div style={{ padding: "0 28px 8px" }}>
-                        {breakdown.sections.map((sec, i) => (
-                            <div key={i} className="modal-section-card">
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 10,
-                                        marginBottom: 10,
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            width: 28,
-                                            height: 28,
-                                            borderRadius: "50%",
-                                            background: "linear-gradient(135deg, #12A1A6, #54D6D4)",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            flexShrink: 0,
-                                        }}
-                                    >
-                                        <span style={{ color: "#fff", fontWeight: 900, fontSize: "0.7rem" }}>{i + 1}</span>
-                                    </div>
-                                    <h3
-                                        style={{
-                                            fontSize: "0.9rem",
-                                            fontWeight: 800,
-                                            color: "#0F233F",
-                                            margin: 0,
-                                        }}
-                                    >
-                                        {sec.heading}
-                                    </h3>
-                                </div>
-                                <p style={{ fontSize: "0.875rem", color: "#475569", lineHeight: 1.7, margin: sec.bullets ? "0 0 12px" : 0 }}>
-                                    {sec.body}
-                                </p>
-                                {sec.bullets && (
-                                    <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
-                                        {sec.bullets.map((b, bi) => (
-                                            <li
-                                                key={bi}
-                                                style={{
-                                                    display: "flex",
-                                                    alignItems: "flex-start",
-                                                    gap: 10,
-                                                    fontSize: "0.875rem",
-                                                    color: "#334155",
-                                                    lineHeight: 1.6,
-                                                }}
-                                            >
-                                                <span
-                                                    style={{
-                                                        width: 6,
-                                                        height: 6,
-                                                        borderRadius: "50%",
-                                                        background: "#12A1A6",
-                                                        flexShrink: 0,
-                                                        marginTop: 8,
-                                                    }}
-                                                />
-                                                {b}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                    {/* Teal accent divider */}
+                    <div
+                        style={{
+                            height: 3,
+                            borderRadius: 999,
+                            background: "linear-gradient(90deg, #12A1A6, #54D6D4, transparent)",
+                            margin: "20px 28px 0",
+                        }}
+                    />
 
-                    {/* Key Checks */}
-                    <div style={{ padding: "8px 28px 32px" }}>
-                        <div
-                            style={{
-                                background: "linear-gradient(135deg, #f0fdfd, #e6faf9)",
-                                border: "1px solid #99f6e4",
-                                borderRadius: 14,
-                                padding: "18px 22px",
-                            }}
-                        >
-                            <div
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 8,
-                                    marginBottom: 14,
-                                }}
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#12A1A6" strokeWidth="2.5">
-                                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span
-                                    style={{
-                                        fontSize: "0.75rem",
-                                        fontWeight: 800,
-                                        color: "#12A1A6",
-                                        letterSpacing: "0.06em",
-                                        textTransform: "uppercase",
-                                    }}
-                                >
-                                    Key Things to Check
-                                </span>
-                            </div>
-                            <div>
-                                {breakdown.keyChecks.map((check, ci) => (
-                                    <div key={ci} className="key-check-item">
-                                        <div
-                                            style={{
-                                                width: 20,
-                                                height: 20,
-                                                borderRadius: "50%",
-                                                background: "#12A1A620",
-                                                border: "1.5px solid #12A1A640",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                flexShrink: 0,
-                                                marginTop: 1,
-                                            }}
-                                        >
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#12A1A6" strokeWidth="3">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </div>
-                                        <span style={{ fontSize: "0.875rem", color: "#0e4f52", lineHeight: 1.55, fontWeight: 600 }}>{check}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
+                    {/* Markdown content — rendered exactly like CompletedView */}
+                    <div style={{ padding: "0 0 32px" }} dangerouslySetInnerHTML={{ __html: markdownToHtml(example.breakdown) }} />
                 </div>
             </div>
         </>
     );
 }
-
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ExamplesPage() {
