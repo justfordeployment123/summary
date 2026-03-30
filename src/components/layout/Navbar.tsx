@@ -17,7 +17,6 @@ export function Navbar() {
         return () => window.removeEventListener("scroll", fn);
     }, []);
 
-    // Updated to use actual routes instead of hash links
     const navTabs = [
         { label: "How it Works", href: "/how-it-works" },
         { label: "Pricing", href: "/pricing" },
@@ -29,10 +28,8 @@ export function Navbar() {
     const handleUploadClick = () => {
         setMobileMenuOpen(false);
         if (pathname === "/") {
-            // If already on home, scroll to the upload section
             document.getElementById("upload-section")?.scrollIntoView({ behavior: "smooth" });
         } else {
-            // If on another page, navigate home and append the hash
             router.push("/#upload-section");
         }
     };
@@ -79,7 +76,7 @@ export function Navbar() {
                                 fontFamily: "Raleway,sans-serif",
                                 fontWeight: 600,
                                 fontSize: "0.82rem",
-                                color: pathname === tab.href ? "#12A1A6" : "#0F233F", // Highlight active page
+                                color: pathname === tab.href ? "#12A1A6" : "#0F233F",
                                 textDecoration: "none",
                                 borderRadius: 8,
                                 transition: "all 0.2s",
@@ -100,8 +97,10 @@ export function Navbar() {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    {/* Upload button — hidden on mobile, shown on desktop */}
                     <button
                         onClick={handleUploadClick}
+                        className="desktop-upload-btn"
                         style={{
                             padding: "9px 20px",
                             borderRadius: 10,
@@ -169,12 +168,34 @@ export function Navbar() {
                             {tab.label}
                         </Link>
                     ))}
+
+                    {/* Upload button inside mobile menu */}
+                    <button
+                        onClick={handleUploadClick}
+                        style={{
+                            marginTop: 8,
+                            padding: "13px 20px",
+                            borderRadius: 10,
+                            background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
+                            color: "#fff",
+                            border: "none",
+                            fontFamily: "Raleway,sans-serif",
+                            fontWeight: 800,
+                            fontSize: "0.9rem",
+                            cursor: "pointer",
+                            boxShadow: "0 3px 12px rgba(18,161,166,0.35)",
+                            width: "100%",
+                        }}
+                    >
+                        Upload FREE Here →
+                    </button>
                 </div>
             )}
 
             <style>{`
                 @media (max-width: 768px) {
                     .desktop-nav { display: none !important; }
+                    .desktop-upload-btn { display: none !important; }
                     .mobile-menu-btn { display: flex !important; }
                 }
             `}</style>

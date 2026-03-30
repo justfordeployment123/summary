@@ -111,16 +111,7 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                 </p>
 
                 {/* Before / After Cards */}
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr auto 1fr",
-                        gap: 0,
-                        alignItems: "center",
-                        maxWidth: 860,
-                        margin: "0 auto 52px",
-                    }}
-                >
+                <div className="before-after-grid">
                     {/* BEFORE card */}
                     <div
                         style={{
@@ -132,7 +123,6 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                             position: "relative",
                         }}
                     >
-                        {/* Before label */}
                         <div
                             style={{
                                 position: "absolute",
@@ -150,7 +140,6 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                             Before
                         </div>
 
-                        {/* Tag */}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                             <span
                                 style={{
@@ -169,15 +158,7 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                             <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "#1a2b35" }}>NHS Appointment Letter</span>
                         </div>
 
-                        {/* Original letter label */}
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 6,
-                                marginBottom: 10,
-                            }}
-                        >
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                 <polyline points="14 2 14 8 20 8" />
@@ -209,24 +190,46 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                         </p>
                     </div>
 
-                    {/* Arrow */}
-                    <div
-                        style={{
-                            width: 44,
-                            height: 44,
-                            borderRadius: "50%",
-                            background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            boxShadow: "0 4px 18px rgba(18,161,166,0.45)",
-                            flexShrink: 0,
-                            margin: "0 16px",
-                        }}
-                    >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                        </svg>
+                    {/* Arrow — rotates to down arrow on mobile */}
+                    <div className="arrow-divider">
+                        {/* Desktop: right arrow */}
+                        <div
+                            className="arrow-desktop"
+                            style={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: "50%",
+                                background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                boxShadow: "0 4px 18px rgba(18,161,166,0.45)",
+                                flexShrink: 0,
+                            }}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                        </div>
+                        {/* Mobile: down arrow */}
+                        <div
+                            className="arrow-mobile"
+                            style={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: "50%",
+                                background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
+                                display: "none",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                boxShadow: "0 4px 18px rgba(18,161,166,0.45)",
+                                margin: "0 auto",
+                            }}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m0 0l-5-5m5 5l5-5" />
+                            </svg>
+                        </div>
                     </div>
 
                     {/* AFTER card */}
@@ -241,7 +244,6 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                             position: "relative",
                         }}
                     >
-                        {/* After label */}
                         <div
                             style={{
                                 position: "absolute",
@@ -259,15 +261,7 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                             After
                         </div>
 
-                        {/* Plain English heading */}
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                                marginBottom: 14,
-                            }}
-                        >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                             <div
                                 style={{
                                     width: 22,
@@ -305,11 +299,9 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                         >
                             {afterText}
                         </p>
-
-                        {/* CTA inside card */}
                     </div>
                 </div>
-                
+
                 {/* Bottom CTA */}
                 <button
                     onClick={onScrollToUpload}
@@ -338,12 +330,50 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                         e.currentTarget.style.boxShadow = "0 6px 28px rgba(18,161,166,0.45)";
                     }}
                 >
-                    Let's See What It <span style={{ fontWeight: 400, fontStyle: "italic" }}>Really</span> Means
+                    Let's See What It <span style={{ fontWeight: 400, fontStyle: "italic", margin: "0 4px" }}>Really</span> Means
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
                 </button>
             </div>
+
+            <style>{`
+                .before-after-grid {
+                    display: grid;
+                    grid-template-columns: 1fr auto 1fr;
+                    gap: 0;
+                    align-items: center;
+                    max-width: 860px;
+                    margin: 0 auto 52px;
+                }
+
+                .arrow-divider {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 0 16px;
+                }
+
+                @media (max-width: 640px) {
+                    .before-after-grid {
+                        grid-template-columns: 1fr;
+                        gap: 0;
+                        margin-bottom: 36px;
+                    }
+
+                    .arrow-divider {
+                        padding: 16px 0;
+                    }
+
+                    .arrow-desktop {
+                        display: none !important;
+                    }
+
+                    .arrow-mobile {
+                        display: flex !important;
+                    }
+                }
+            `}</style>
         </section>
     );
 }
