@@ -9,6 +9,7 @@ export interface UploadInitPayload {
     firstName: string;
     email: string;
     marketingConsent: boolean;
+    turnstileToken: string; 
 }
 
 export interface UploadInitResponse {

@@ -22,6 +22,8 @@ export default function Home() {
     const [disclaimerAcknowledged, setDisclaimerAcknowledged] = useState(false);
 
     // ── Upload state ──────────────────────────────────────────────────────────
+    // add this state near your other useState hooks
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [currentStep, setCurrentStep] = useState(0);
     const [uploadStatus, setUploadStatus] = useState("");
@@ -156,6 +158,7 @@ export default function Home() {
                 firstName: firstName.trim(),
                 email: email.trim(),
                 marketingConsent,
+                turnstileToken: turnstileToken!,
             });
 
             setCurrentStep(1);
@@ -385,6 +388,8 @@ export default function Home() {
                             isError={isError}
                             currentStep={currentStep}
                             handleSubmit={handleSubmit}
+                            turnstileToken={turnstileToken}
+                            setTurnstileToken={setTurnstileToken}
                         />
                     </div>
                 )}

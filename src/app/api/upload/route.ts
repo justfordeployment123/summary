@@ -22,7 +22,20 @@ export async function POST(request: Request) {
     try {
         const body = await request.json();
         // Here, 'category' is actually the Category DB _id sent from the frontend
-        const { fileName, fileType, category: categoryId, firstName, email, marketingConsent } = body;
+        const { fileName, fileType, category: categoryId, firstName, email, marketingConsent, turnstileToken } = body;
+
+        // 1. Verify Turnstile token FIRST before doing anything else
+        const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+            method: "POST",
+            body: new URLSearchParams({
+                secret: process.env.TURNSTILE_SECRET_KEY!,
+                response: turnstileToken ?? "",
+            }),
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyData.success) {
+            return NextResponse.json({ error: "Security check failed. Please try again." }, { status: 403 });
+        }
 
         // 1. Initial Server-Side Validation
         if (!ALLOWED_MIME_TYPES.includes(fileType)) {

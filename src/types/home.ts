@@ -104,6 +104,8 @@ export interface UploadSectionProps {
     isError: boolean;
     currentStep: number;
     handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+    turnstileToken: string | null;
+    setTurnstileToken: (token: string | null) => void;
 }
 
 // ─── Stripe Payment Props ─────────────────────────────────────────────────────
