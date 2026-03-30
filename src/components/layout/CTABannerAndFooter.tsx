@@ -114,12 +114,21 @@ export function Footer() {
                         justifyContent: "space-between",
                         flexWrap: "wrap",
                         gap: 12,
-                    }}  
+                    }}
                 >
                     <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.35)" }}>© 2025 ExplainMyLetter. All rights reserved.</p>
                     <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.25)", maxWidth: 440, textAlign: "right" }}>
                         Summaries are for informational purposes only and do not constitute legal, financial, medical, or professional advice.
                     </p>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            throw new Error("Sentry Test Error from ExplainMyLetter!");
+                        }}
+                        style={{ background: "red", color: "white", padding: "10px" }}
+                    >
+                        Trigger Sentry
+                    </button>
                 </div>
             </div>
         </footer>
