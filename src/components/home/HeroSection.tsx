@@ -1,12 +1,77 @@
 "use client";
 
 import type { HeroSectionProps } from "@/types/home";
+import { useEffect, useRef } from "react";
 
 const beforeText = `"We are writing to inform you that your recent test results have now been reviewed by the relevant department. Based on the findings, no immediate concerns have been identified at this stage. However, as part of ongoing monitoring, you are required to attend a follow-up appointment scheduled for 12 May 2026..."`;
 
 const afterText = `This letter is from St George's Hospital NHS Trust confirming that your recent test results have been reviewed. No immediate concerns have been identified, but you are invited to a follow-up appointment on 12 May 2026 for ongoing monitoring. While not urgent, it is important to attend or reschedule to ensure continued care.`;
 
+const floatingCategories = [
+    "Medical or Health letter",
+    "Money owed or payment letter",
+    "Court or legal notice",
+    "Work or employment issue",
+    "Insurance letter",
+    "Bank or financial letter",
+    "Government or tax letter",
+    "Housing, rent or mortgage",
+    "Utility or service provider",
+    "School or education",
+    "Benefits or welfare",
+    "Subscription or contract issue",
+    "I'm not sure",
+];
+
 export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        const NUM = 14;
+        const slots: { el: HTMLDivElement; active: boolean }[] = [];
+        const rand = (a: number, b: number) => Math.random() * (b - a) + a;
+
+        for (let i = 0; i < NUM; i++) {
+            const el = document.createElement("div");
+            el.style.cssText = `position:absolute;color:rgba(180,200,210,0.18);font-family:'Raleway',sans-serif;
+      font-size:${rand(0.62, 0.82)}rem;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;
+      white-space:nowrap;opacity:0;transition:opacity 1.8s ease;user-select:none;
+      top:${rand(4, 92)}%;left:${rand(2, 85)}%`;
+            container.appendChild(el);
+            slots.push({ el, active: false });
+        }
+
+        function cycleSlot(slot: { el: HTMLDivElement; active: boolean }) {
+            if (slot.active) {
+                slot.el.style.opacity = "0";
+                slot.active = false;
+                setTimeout(() => cycleSlot(slot), rand(2000, 5000) + 1800);
+            } else {
+                slot.el.textContent = floatingCategories[Math.floor(Math.random() * floatingCategories.length)];
+                slot.el.style.opacity = "1";
+                slot.active = true;
+                setTimeout(() => cycleSlot(slot), rand(3000, 7000));
+            }
+        }
+
+        slots.forEach((slot, i) => {
+            setTimeout(
+                () => {
+                    slot.el.textContent = floatingCategories[Math.floor(Math.random() * floatingCategories.length)];
+                    slot.el.style.opacity = "1";
+                    slot.active = true;
+                    setTimeout(() => cycleSlot(slot), rand(3000, 7000));
+                },
+                i * rand(200, 600),
+            );
+        });
+
+        return () => {
+            container.innerHTML = "";
+        };
+    }, []);
+
     return (
         <section
             style={{
@@ -40,6 +105,7 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                     pointerEvents: "none",
                 }}
             />
+            <div ref={containerRef} style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }} />
 
             <div style={{ maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 1 }}>
                 {/* Eyebrow */}
