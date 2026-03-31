@@ -476,18 +476,6 @@ To stay in control of the situation, a simple step-by-step approach can help:
         urgency: "Time-Sensitive",
         urgencyColor: "#dc2626",
         urgencyBg: "#fff1f2",
-        breakdown: ``,
-    },
-    {
-        type: "Housing / Rent",
-        badge: "Housing",
-        badgeColor: "#701a75",
-        badgeBg: "#fdf4ff",
-        before: "We are writing to inform you that your rent account is currently in arrears in the sum of £1,800. You are required to make payment or contact us within 14 days. Failure to address this matter may result in further action being taken.",
-        after: "Your housing association has identified £1,800 in rent arrears on your account. You have 14 days to pay or discuss the debt with them. This is a serious notification that could lead to formal legal action if ignored. You should check your rent statements and contact your landlord immediately to agree on a payment plan.",
-        urgency: "Time-Sensitive",
-        urgencyColor: "#dc2626",
-        urgencyBg: "#fff1f2",
         breakdown: `This letter is from HM Revenue & Customs (HMRC), stating that you have underpaid tax for a previous tax year. The amount being requested is £2,340, and you are required to take action within 30 days.
 
 The wording indicates that this is a formal request for payment rather than an informal notice. HMRC letters are typically clear about expectations, and this one suggests that the matter has already been reviewed and calculated.
@@ -550,6 +538,79 @@ To stay in control of the situation, a simple step-by-step approach can help:
 4. Contact HMRC within the 30-day period
 
 **Key things to check** — The amount owed (£2,340), the deadline (30 days), and the tax year and calculation details.`,
+    },
+    {
+        type: "Housing / Rent",
+        badge: "Housing",
+        badgeColor: "#701a75",
+        badgeBg: "#fdf4ff",
+        before: "We are writing to inform you that your rent account is currently in arrears in the sum of £1,800. You are required to make payment or contact us within 14 days. Failure to address this matter may result in further action being taken.",
+        after: "Your housing association has identified £1,800 in rent arrears on your account. You have 14 days to pay or discuss the debt with them. This is a serious notification that could lead to formal legal action if ignored. You should check your rent statements and contact your landlord immediately to agree on a payment plan.",
+        urgency: "Time-Sensitive",
+        urgencyColor: "#dc2626",
+        urgencyBg: "#fff1f2",
+        breakdown: `This letter is from your housing association, informing you that your rent account is in arrears. The amount outstanding is £1,800, and you are being asked to take action within 14 days.
+
+The wording suggests that this is moving beyond a simple reminder and into a more formal stage of the process, where the landlord is expecting a response.
+
+## What this means in practice
+
+At this stage, the situation is serious but still manageable. This type of letter is typically sent before legal action is considered.
+
+If the arrears are not addressed, the situation may progress to:
+
+- Formal legal proceedings
+- Possibility of eviction action
+- Further escalation of the tenancy issue
+
+This does not mean eviction is happening now, but the letter is indicating that the situation could move in that direction if ignored.
+
+## Understanding your position
+
+It is important to recognise that you still have options and the ability to engage with the landlord before things escalate further.
+
+You may choose to:
+
+- Pay some or all of the arrears
+- Contact the landlord to arrange a repayment plan
+- Seek advice or support
+
+Many tenants assume these letters mean immediate action will be taken, but landlords often expect communication and are willing to agree arrangements.
+
+## If the amount doesn't look right
+
+Before taking action, it is worth checking your records to confirm the accuracy of the arrears.
+
+You should check:
+
+- Rent payments made
+- Dates of missed payments
+- Any discrepancies in the account
+
+If something seems incorrect, you can raise this with the landlord.
+
+## If you're unable to pay
+
+If you cannot pay the full amount, early communication is essential.
+
+A practical approach would be:
+
+- Contact the housing association immediately
+- Explain your situation
+- Request a repayment arrangement
+
+This can help prevent further escalation and demonstrate that you are engaging.
+
+## What to do next
+
+To stay in control of the situation, a simple step-by-step approach can help:
+
+1. Confirm the amount owed
+2. Review your payment history
+3. Contact the landlord within the 14-day period
+4. Agree a plan if needed
+
+**Key things to check** — The arrears amount (£1,800), the timeframe (14 days), and any references to legal action.`,
     },
     {
         type: "Utility",
