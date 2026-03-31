@@ -28,7 +28,7 @@ export function Navbar() {
     const handleUploadClick = () => {
         setMobileMenuOpen(false);
         if (pathname === "/") {
-            document.getElementById("upload-section")?.scrollIntoView({ behavior: "smooth" });
+            document.getElementById("upload")?.scrollIntoView({ behavior: "smooth" });
         } else {
             router.push("/#upload-section");
         }

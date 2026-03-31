@@ -1086,7 +1086,7 @@ export default function ExamplesPage() {
     const [activeExample, setActiveExample] = useState<Example | null>(null);
 
     const handleRouteToUpload = () => {
-        router.push("/#upload-section");
+        router.push("/#upload");
     };
 
     const openModal = useCallback((ex: Example) => setActiveExample(ex), []);

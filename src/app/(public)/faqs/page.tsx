@@ -78,7 +78,7 @@ export default function FAQsPage() {
     const router = useRouter();
 
     const handleRouteToUpload = () => {
-        router.push("/#upload-section");
+        router.push("/#upload");    
     };
 
     return (

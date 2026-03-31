@@ -486,7 +486,7 @@ export function UploadSection({
                                                     width: "25%",
                                                 }}
                                             >
-                                                Full
+                                                Full(Paid)
                                             </th>
                                         </tr>
                                     </thead>

@@ -78,13 +78,13 @@ export function Footer() {
             <div style={{ maxWidth: 1100, margin: "0 auto" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 20, marginBottom: 28 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <img src="/logo-icon.png" alt="ExplainMyLetter" style={{ width: 34, height: 34, filter: "brightness(0) invert(1)" }} />
-                        <div>
+                        <img src="/white-horizontal-logo.png" alt="ExplainMyLetter" style={{ width: 200 }} />
+                        {/* <div>
                             <div style={{ fontWeight: 900, color: "#fff", fontSize: "0.95rem" }}>ExplainMyLetter</div>
                             <div style={{ fontSize: "0.7rem", color: "#54D6D4", fontWeight: 600, letterSpacing: "0.04em" }}>
                                 Clarity. Confidence. Next Steps.
                             </div>
-                        </div>
+                        </div> */}
                     </div>
                     <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         {footerLinks.map((l) => (

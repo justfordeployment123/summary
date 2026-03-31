@@ -5,7 +5,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { Spinner, CheckIcon } from "@/components/home/primitives";
 import { UpsellCard } from "@/components/home/cards";
 import { EmbeddedPaymentForm } from "@/components/home/EmbeddedPaymentForm";
-import { URGENCY_CONFIG, formatPrice } from "@/lib/homeUtils";
+import { URGENCY_CONFIG, formatPrice, markdownToHtml } from "@/lib/homeUtils";
 import type { SummaryViewProps } from "@/types/home";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
@@ -211,7 +211,7 @@ export function SummaryView({
                 {/* Summary body */}
                 <div style={{ padding: "32px 36px" }}>
                     <SectionLabel>Plain English Summary</SectionLabel>
-                    <p
+                    {/* <p
                         style={{
                             color: "#1e293b",
                             lineHeight: 1.85,
@@ -222,7 +222,8 @@ export function SummaryView({
                         }}
                     >
                         {summaryData.summary}
-                    </p>
+                    </p> */}
+                    <div dangerouslySetInnerHTML={{ __html: markdownToHtml(summaryData.summary) }} />
                 </div>
             </div>
 

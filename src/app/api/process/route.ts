@@ -153,6 +153,8 @@ export async function POST(request: Request) {
         if (textWords.length > 1200) {
             extractedText = textWords.slice(0, 1200).join(" ");
         }
+        console.log(`Extraction complete for Job ID: ${jobId}. Word count: ${textWords.length}. Confidence flag: ${confidenceFlag}`);
+        console.log("Extracted Text Sample:", extractedText.slice(0, 500)); // Log first 500 chars for debugging
 
         // ── Store in Temp collection (24-hr TTL failsafe, §4.3) ──
         await Temp.findOneAndUpdate(

@@ -39,7 +39,7 @@ export default function WhyChooseUsPage() {
     const router = useRouter();
 
     const handleRouteToUpload = () => {
-        router.push("/#upload-section");
+        router.push("/#upload");
     };
 
     return (

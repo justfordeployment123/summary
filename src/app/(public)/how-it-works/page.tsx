@@ -33,7 +33,7 @@ export default function HowItWorksPage() {
     const router = useRouter();
 
     const handleRouteToUpload = () => {
-        router.push("/#upload-section");
+        router.push("/#upload");
     };
 
     return (
