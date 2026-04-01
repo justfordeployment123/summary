@@ -120,7 +120,7 @@ export function Footer() {
                     <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.25)", maxWidth: 440, textAlign: "right" }}>
                         Summaries are for informational purposes only and do not constitute legal, financial, medical, or professional advice.
                     </p>
-                    <button
+                    {/* <button
                         type="button"
                         onClick={() => {
                             console.log("Triggering Sentry test error...");
@@ -129,7 +129,7 @@ export function Footer() {
                         style={{ background: "red", color: "white", padding: "10px" }}
                     >
                         Trigger Sentry
-                    </button>
+                    </button> */}
                 </div>
             </div>
         </footer>

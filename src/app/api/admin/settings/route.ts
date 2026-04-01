@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS = {
     openai_monthly_token_cap:        1000000,
     openai_monthly_cost_cap:         5000,
     openai_alert_threshold_percent:  80,
+    openai_alert_email:              "",   // Email notified when usage crosses the alert threshold
     download_link_expiry_hours:      72,
     file_retention_hours:            24,
     stuck_job_timeout_minutes:       5,

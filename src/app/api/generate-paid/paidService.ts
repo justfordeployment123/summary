@@ -2,18 +2,17 @@
 //
 // CRITICAL: This route must ONLY be called by the internal Stripe webhook handler.
 // It must NEVER be called directly from client-side code (§7.2).
-// The webhook handler verifies payment before calling this function.
 //
 // Requirement constraints (§8, §9, §10):
 //   • Payment lock: job must be in PAYMENT_CONFIRMED state
 //   • Category-specific paid prompt fetched from DB (§10.2) — falls back to hardcoded default
 //   • Token caps: configurable max input/output tokens (from Settings)
 //   • 1,200-word hard cap on input text
-//   • Semantic chunking for long documents
 //   • 3 retries with 2s/5s backoff
 //   • AI output validation
 //   • Token usage & cost logging
 //   • Global monthly cap check
+//   • Alert email sent on every request when usage is at or above threshold
 //   • OpenAI model read from Settings DB (openai_model key) — falls back to gpt-4.1
 
 import OpenAI from "openai";
@@ -23,6 +22,7 @@ import { Setting } from "@/models/Setting";
 import { Prompt } from "@/models/Prompt";
 import { JobToken } from "@/models/JobToken";
 import { checkAndIncrementMonthlyUsage } from "@/lib/tokenBudget";
+import { maybeSendCapAlert } from "@/lib/sendCapAlert";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -79,16 +79,6 @@ async function sleep(ms: number) {
 }
 
 // ─── DB Prompt Lookup (§10.2) ─────────────────────────────────────────────────
-//
-// Priority order:
-//   1. Active category-specific paid prompt for this category
-//   2. Active generic paid prompt (no category_id)
-//   3. Hardcoded fallback (below)
-//
-// Placeholders replaced before sending:
-//   {{document_text}} → truncatedText
-//   {{category}}      → categoryName
-//   {{urgency}}       → job urgency from free summary stage
 
 async function resolvePromptTemplate(
     categoryId: string | null,
@@ -100,7 +90,6 @@ async function resolvePromptTemplate(
     let dbPromptText: string | null = null;
 
     try {
-        // 1. Category-specific paid prompt
         if (categoryId) {
             const categoryPrompt = await Prompt.findOne({
                 category_id: categoryId,
@@ -115,7 +104,6 @@ async function resolvePromptTemplate(
             }
         }
 
-        // 2. Generic paid prompt
         if (!dbPromptText) {
             const genericPrompt = await Prompt.findOne({
                 category_id: { $exists: false },
@@ -133,7 +121,6 @@ async function resolvePromptTemplate(
         console.warn("[generate-paid] Failed to load prompt from DB, using fallback:", err);
     }
 
-    // 3. If DB prompt found, hydrate it, add upsells, and append mandatory rules
     if (dbPromptText) {
         const hydrated = hydratePlaceholders(dbPromptText, {
             categoryName,
@@ -144,7 +131,6 @@ async function resolvePromptTemplate(
         return hydrated + MANDATORY_PAID_RULES;
     }
 
-    // 4. Hardcoded fallback
     return buildFallbackPrompt(categoryName, documentText, upsellInstructions);
 }
 
@@ -156,9 +142,7 @@ function hydratePlaceholders(
         template
             .replace(/\{\{document_text\}\}/g, vars.documentText)
             .replace(/\{\{category\}\}/g, vars.categoryName)
-            .replace(/\{\{urgency\}\}/g, vars.urgency) +
-        // Append upsell instructions after the template if any
-        (vars.upsellInstructions ? `\n\n${vars.upsellInstructions}` : "")
+            .replace(/\{\{urgency\}\}/g, vars.urgency) + (vars.upsellInstructions ? `\n\n${vars.upsellInstructions}` : "")
     );
 }
 
@@ -214,8 +198,8 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
     }
 
     // ── 2. Check global monthly token cap (§9.2) ──
-    const capResult = await checkAndIncrementMonthlyUsage(0);
-    if (!capResult.allowed) {
+    const preCheck = await checkAndIncrementMonthlyUsage(0);
+    if (!preCheck.allowed) {
         throw new Error("Monthly token cap reached. Paid generation paused.");
     }
 
@@ -233,16 +217,13 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
     // ── 4. Enforce word cap on input (§9.1) ──
     const truncatedText = truncateToWordCap(extractedText, wordCap);
 
-    // ── 5. Resolve prompt from DB (§10.2), fall back to hardcoded if none ──
+    // ── 5. Resolve prompt ──
     const category = job.category_id as any;
     const categoryId = category?._id?.toString() ?? null;
     const categoryName = category?.name ?? "General";
-
-    // We use 'let' because the AI might upgrade the urgency during generation
     let urgency = job.urgency ?? "Routine";
 
     const upsellInstructions = buildUpsellInstructions(upsells);
-
     const prompt = await resolvePromptTemplate(categoryId, categoryName, truncatedText, urgency, upsellInstructions);
 
     // ── 6. Transition to PAID_BREAKDOWN_GENERATING ──
@@ -277,13 +258,9 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
             tokensIn = completion.usage?.prompt_tokens ?? 0;
             tokensOut = completion.usage?.completion_tokens ?? 0;
 
-            // ── PARSE AND STRIP URGENCY ──
             const urgencyMatch = rawOutput.match(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i);
-            if (urgencyMatch) {
-                urgency = urgencyMatch[1]; // Update the local urgency variable
-            }
+            if (urgencyMatch) urgency = urgencyMatch[1];
 
-            // Remove the urgency line entirely from the final text
             const cleanedBreakdown = rawOutput.replace(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i, "").trim();
 
             if (!validateOutput(cleanedBreakdown)) {
@@ -314,10 +291,22 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
             model,
             attempt_number: attemptNumber,
         });
-        await checkAndIncrementMonthlyUsage(tokensIn + tokensOut);
+
+        // ── 9. Increment monthly usage counter & check threshold for alert ──
+        const usageResult = await checkAndIncrementMonthlyUsage(tokensIn + tokensOut);
+
+        // Fire alert email on every request while at or above threshold (fire-and-forget)
+        if (usageResult.aboveThreshold) {
+            maybeSendCapAlert({
+                usedTokens: usageResult.currentUsage,
+                capTokens: usageResult.cap,
+                percentUsed: usageResult.percentUsed,
+                promptType: "paid",
+            }).catch((err) => console.error("[generate-paid] Cap alert email error:", err));
+        }
     }
 
-    // ── 9. Handle failure ──
+    // ── 10. Handle failure ──
     if (lastError) {
         await Job.findByIdAndUpdate(jobId, {
             status: "FAILED",
@@ -327,14 +316,14 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
         throw lastError;
     }
 
-    // ── 10. Transition to COMPLETED ──
+    // ── 11. Transition to COMPLETED ──
     await Job.findByIdAndUpdate(jobId, {
         status: "COMPLETED",
         previous_state: "PAID_BREAKDOWN_GENERATING",
         state_transitioned_at: new Date(),
         processed_at: new Date(),
-        paid_summary: detailedBreakdown, // Saved completely clean
-        urgency: urgency, // Saved to DB
+        paid_summary: detailedBreakdown,
+        urgency,
     });
 
     return { detailedBreakdown };
