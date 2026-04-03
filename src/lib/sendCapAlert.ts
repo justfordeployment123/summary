@@ -14,10 +14,10 @@ import nodemailer from "nodemailer";
 import { Setting } from "@/models/Setting";
 
 export interface CapAlertOptions {
-    usedTokens:  number;
-    capTokens:   number;
+    usedTokens: number;
+    capTokens: number;
     percentUsed: number;
-    promptType:  "free" | "paid";
+    promptType: "free" | "paid";
 }
 
 /**
@@ -30,7 +30,7 @@ export interface CapAlertOptions {
 export async function maybeSendCapAlert(opts: CapAlertOptions): Promise<void> {
     try {
         const emailSetting = await Setting.findOne({ key: "openai_alert_email" }).lean<{ value: string }>();
-        const alertEmail   = emailSetting?.value?.trim() ?? "";
+        const alertEmail = emailSetting?.value?.trim() ?? "";
 
         if (!alertEmail) return;
 
@@ -53,17 +53,17 @@ export async function maybeSendCapAlert(opts: CapAlertOptions): Promise<void> {
         });
 
         const percentRounded = opts.percentUsed.toFixed(1);
-        const usedFormatted  = opts.usedTokens.toLocaleString();
-        const capFormatted   = opts.capTokens.toLocaleString();
-        const remaining      = Math.max(0, opts.capTokens - opts.usedTokens).toLocaleString();
-        const triggeredBy    = opts.promptType === "free" ? "Free Summary" : "Paid Breakdown";
-        const isCapReached   = opts.usedTokens >= opts.capTokens;
+        const usedFormatted = opts.usedTokens.toLocaleString();
+        const capFormatted = opts.capTokens.toLocaleString();
+        const remaining = Math.max(0, opts.capTokens - opts.usedTokens).toLocaleString();
+        const triggeredBy = opts.promptType === "free" ? "Free Summary" : "Paid Breakdown";
+        const isCapReached = opts.usedTokens >= opts.capTokens;
 
-        const subjectPrefix  = isCapReached ? "🚨 Monthly Cap REACHED" : `⚠️ Usage Alert — ${percentRounded}%`;
+        const subjectPrefix = isCapReached ? "🚨 Monthly Cap REACHED" : `⚠️ Usage Alert — ${percentRounded}%`;
 
         await transporter.sendMail({
-            from:    `"LetterDecoder Admin" <${from}>`,
-            to:      alertEmail,
+            from: `"LetterDecoder Admin" <${from}>`,
+            to: alertEmail,
             subject: `${subjectPrefix} of OpenAI Monthly Cap`,
             html: `
                 <div style="font-family:sans-serif;max-width:580px;margin:0 auto;color:#1e293b;">
@@ -98,9 +98,10 @@ export async function maybeSendCapAlert(opts: CapAlertOptions): Promise<void> {
                     </table>
 
                     <p style="font-size:13px;color:#64748b;line-height:1.6;">
-                        ${isCapReached
-                            ? "The monthly cap has been reached. All AI generation is paused until the cap is raised or the month resets. Update the cap in <strong>Admin → Settings → OpenAI / AI</strong>."
-                            : "This alert fires on <strong>every request</strong> while usage remains at or above the configured threshold. To adjust the threshold or alert email, go to <strong>Admin → Settings → OpenAI / AI</strong>."
+                        ${
+                            isCapReached
+                                ? "The monthly cap has been reached. All AI generation is paused until the cap is raised or the month resets. Update the cap in <strong>Admin → Settings → OpenAI / AI</strong>."
+                                : "This alert fires on <strong>every request</strong> while usage remains at or above the configured threshold. To adjust the threshold or alert email, go to <strong>Admin → Settings → OpenAI / AI</strong>."
                         }
                     </p>
 
