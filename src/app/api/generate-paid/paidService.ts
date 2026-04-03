@@ -44,7 +44,9 @@ MANDATORY SYSTEM INSTRUCTIONS (These override any previous instructions):
 1. Do NOT provide legal, financial, or professional advice under any circumstances.
 2. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: [Level]
 3. The [Level] MUST be exactly one of these three words: Routine, Important, or Time-Sensitive.
-4. Do NOT use any colours, HTML, Markdown formatting, or extra text for the urgency label. It must be plain, unformatted text.
+4. Do NOT use any colours, HTML, or extra text for the urgency label. It must be plain, unformatted text.
+4. It should be Proper Markdown formatting, but the URGENCY line MUST be the last line of your response with no additional text or whitespace after it.
+
 
 URGENCY CLASSIFICATION RULES:
 Determine the urgency level based on the specific instructions provided by the user earlier in this prompt. 

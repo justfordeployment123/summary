@@ -425,6 +425,8 @@ export default function Home() {
                             view={view}
                             pollStatus={pollStatus}
                             pollCount={pollCount}
+                            jobId={summaryData.jobId}
+                            accessToken={summaryData.accessToken}
                         />
                     </div>
                 )}
@@ -436,6 +438,8 @@ export default function Home() {
                             completedData={completedData}
                             handleDownload={handleDownload}
                             handleReset={handleReset}
+                            jobId={summaryData.jobId}
+                            accessToken={summaryData.accessToken}
                         />
                     </div>
                 )}

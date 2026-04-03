@@ -1,12 +1,14 @@
 "use client";
 
 import { Elements } from "@stripe/react-stripe-js";
+import { useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Spinner, CheckIcon } from "@/components/home/primitives";
 import { UpsellCard } from "@/components/home/cards";
 import { EmbeddedPaymentForm } from "@/components/home/EmbeddedPaymentForm";
 import { URGENCY_CONFIG, formatPrice, markdownToHtml } from "@/lib/homeUtils";
 import type { SummaryViewProps } from "@/types/home";
+import { FeedbackModal, FeedbackButton } from "@/components/home/FeedbackModal";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -73,7 +75,11 @@ export function SummaryView({
     view,
     pollStatus,
     pollCount,
+    jobId,
+    accessToken,
 }: SummaryViewProps) {
+    const [feedbackOpen, setFeedbackOpen] = useState(false);
+
     const urgency = summaryData?.urgency && URGENCY_CONFIG[summaryData.urgency] ? URGENCY_CONFIG[summaryData.urgency] : URGENCY_CONFIG["Routine"];
 
     const categoryUpsells = upsells.filter((u) => {
@@ -224,7 +230,11 @@ export function SummaryView({
                         {summaryData.summary}
                     </p> */}
                     <div dangerouslySetInnerHTML={{ __html: markdownToHtml(summaryData.summary) }} />
+                    <div style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
+                        <FeedbackButton onClick={() => setFeedbackOpen(true)} label="Rate this summary" />
+                    </div>
                 </div>
+                {/* Inside Card 1 — after the summary <div dangerouslySetInnerHTML...> */}
             </div>
 
             {/* ═══════════════════════════════════════════════════
@@ -856,6 +866,14 @@ export function SummaryView({
                     Upload a different letter
                 </button>
             )}
+            {/* Feedback Modal — free summary */}
+            <FeedbackModal
+                isOpen={feedbackOpen}
+                onClose={() => setFeedbackOpen(false)}
+                surveyType="free_summary"
+                jobId={jobId} // already in your props
+                accessToken={accessToken} // already in your props
+            />
         </div>
     );
 }

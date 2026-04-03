@@ -153,6 +153,10 @@ export interface SummaryViewProps {
     view: ViewState;
     pollStatus: string;
     pollCount: number;
+
+    // ... all existing fields ...
+    jobId: string;
+    accessToken: string;
 }
 
 export interface ProcessingViewProps {
@@ -165,4 +169,6 @@ export interface CompletedViewProps {
     completedData: CompletedData;
     handleDownload: (fmt: string) => void;
     handleReset: () => void;
+    jobId: string;
+    accessToken: string;
 }

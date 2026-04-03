@@ -2,6 +2,8 @@
 
 import { URGENCY_CONFIG, markdownToHtml } from "@/lib/homeUtils";
 import type { ProcessingViewProps, CompletedViewProps } from "@/types/home";
+import { useState } from "react";
+import { FeedbackModal, FeedbackButton } from "@/components/home/FeedbackModal";
 
 export function ProcessingView({ pollStatus, pollCount }: ProcessingViewProps) {
     return (
@@ -45,10 +47,11 @@ export function ProcessingView({ pollStatus, pollCount }: ProcessingViewProps) {
     );
 }
 
-export function CompletedView({ summaryData, completedData, handleDownload, handleReset }: CompletedViewProps) {
+export function CompletedView({ summaryData, completedData, handleDownload, handleReset, jobId, accessToken }: CompletedViewProps) {
     // Assuming firstName is passed via summaryData or context, using fallback for now
     // const firstName = summaryData?.firstName || "there";
     const urgency = summaryData?.urgency && URGENCY_CONFIG[summaryData.urgency] ? URGENCY_CONFIG[summaryData.urgency] : URGENCY_CONFIG["Routine"];
+    const [feedbackOpen, setFeedbackOpen] = useState(false);
 
     return (
         <div
@@ -192,6 +195,10 @@ export function CompletedView({ summaryData, completedData, handleDownload, hand
                         </button>
                     ))}
                 </div>
+                {/* After the download buttons row */}
+                <div style={{ marginTop: 20 }}>
+                    <FeedbackButton onClick={() => setFeedbackOpen(true)} label="Rate your experience" />
+                </div>
 
                 <button
                     onClick={handleReset}
@@ -209,6 +216,13 @@ export function CompletedView({ summaryData, completedData, handleDownload, hand
                     Analyze another document
                 </button>
             </div>
+            <FeedbackModal
+                isOpen={feedbackOpen}
+                onClose={() => setFeedbackOpen(false)}
+                surveyType="full_breakdown"
+                jobId={jobId}
+                accessToken={accessToken}
+            />
         </div>
     );
 }
