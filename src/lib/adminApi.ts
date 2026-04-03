@@ -103,6 +103,44 @@ export interface PatchPromptPayload {
     type?: "free" | "paid";
 }
 
+//Feedback
+export interface FeedbackSurvey {
+    _id: string;
+    survey_type: "free_summary" | "full_breakdown";
+    reference_id?: string;
+    category_id?: string;
+    category_name?: string;
+    urgency_label?: "Routine" | "Important" | "Time-Sensitive";
+    rating_ease_of_understanding?: number;
+    rating_helpfulness?: number;
+    rating_accuracy?: number;
+    rating_urgency_clarity?: number;
+    rating_likelihood_to_upgrade?: number;
+    average_rating?: number;
+    comment?: string | null;
+    converted_to_paid: boolean;
+    purchase_amount_pence?: number | null;
+    created_at: string;
+}
+
+export interface FeedbackFilters {
+    survey_type?: "free_summary" | "full_breakdown";
+    category_id?: string;
+    from?: string; // ISO date string
+    to?: string; // ISO date string
+    page?: number;
+    limit?: number;
+}
+export interface FeedbackResponse {
+    surveys: FeedbackSurvey[];
+    pagination: {
+        total: number;
+        page: number;
+        limit: number;
+        pages: number;
+    };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const adminApi = {
@@ -359,5 +397,32 @@ export const adminApi = {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to fetch prompt versions");
         return data;
+    },
+
+    // --- FEEDBACK ---
+    // ── Methods (add inside the adminApi object) ──────────────────────────────────
+
+    async getFeedback(filters?: FeedbackFilters): Promise<FeedbackResponse> {
+        const params = new URLSearchParams();
+        if (filters?.survey_type) params.set("survey_type", filters.survey_type);
+        if (filters?.category_id) params.set("category_id", filters.category_id);
+        if (filters?.from) params.set("from", filters.from);
+        if (filters?.to) params.set("to", filters.to);
+        if (filters?.page) params.set("page", String(filters.page));
+        if (filters?.limit) params.set("limit", String(filters.limit));
+        const qs = params.toString() ? `?${params.toString()}` : "";
+        const res = await fetch(`/api/admin/feedback${qs}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to fetch feedback");
+        return data;
+    },
+
+    getFeedbackExportUrl(filters?: Omit<FeedbackFilters, "page" | "limit">): string {
+        const params = new URLSearchParams({ export: "csv" });
+        if (filters?.survey_type) params.set("survey_type", filters.survey_type);
+        if (filters?.category_id) params.set("category_id", filters.category_id);
+        if (filters?.from) params.set("from", filters.from);
+        if (filters?.to) params.set("to", filters.to);
+        return `/api/admin/feedback?${params.toString()}`;
     },
 };
