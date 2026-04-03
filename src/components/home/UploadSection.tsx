@@ -93,7 +93,6 @@ export function UploadSection({
             <section id="upload" ref={formRef as React.RefObject<HTMLElement>} style={{ padding: "80px 24px", background: "#fff" }}>
                 <div style={{ maxWidth: 1100, margin: "0 auto" }}>
                     <div className="upload-outer-row" style={{ display: "flex", gap: 48, alignItems: "flex-start", flexWrap: "wrap" }}>
-
                         {/* Left — form */}
                         <div className="upload-form-col" style={{ flex: "1 1 400px", minWidth: 300 }}>
                             <div style={{ marginBottom: 36 }}>
@@ -154,7 +153,13 @@ export function UploadSection({
                                             ))}
                                         </select>
                                         <svg
-                                            style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+                                            style={{
+                                                position: "absolute",
+                                                right: 14,
+                                                top: "50%",
+                                                transform: "translateY(-50%)",
+                                                pointerEvents: "none",
+                                            }}
                                             width="16"
                                             height="16"
                                             viewBox="0 0 24 24"
@@ -235,9 +240,9 @@ export function UploadSection({
                                 <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
                                     <input type="checkbox" required disabled={isUploading} />
                                     <span style={{ fontSize: "0.82rem", color: "#64748b", lineHeight: 1.5, paddingTop: 1 }}>
-                                        <span style={{ color: "#0F233F", fontWeight: 700 }}>I confirm I am authorised to upload this document</span> and
-                                        understand that Explain My Letter provides simplified explanations, <strong>NOT</strong> legal, medical, financial
-                                        or professional advice. <span style={{ color: "#f43f5e" }}>*</span>
+                                        <span style={{ color: "#0F233F", fontWeight: 700 }}>I confirm I am authorised to upload this document</span>{" "}
+                                        and understand that Explain My Letter provides simplified explanations, <strong>NOT</strong> legal, medical,
+                                        financial or professional advice. <span style={{ color: "#f43f5e" }}>*</span>
                                     </span>
                                 </label>
 
@@ -463,7 +468,9 @@ export function UploadSection({
                                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                                     <thead>
                                         <tr>
-                                            <th style={{ textAlign: "left", paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)" }}></th>
+                                            <th
+                                                style={{ textAlign: "left", paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)" }}
+                                            ></th>
                                             <th
                                                 style={{
                                                     paddingBottom: 16,
@@ -486,7 +493,7 @@ export function UploadSection({
                                                     width: "25%",
                                                 }}
                                             >
-                                                Full(Paid)
+                                                Full (Paid)
                                             </th>
                                         </tr>
                                     </thead>
@@ -531,7 +538,6 @@ export function UploadSection({
                                 </table>
                             </div>
                         </div>
-
                     </div>
                 </div>
             </section>
