@@ -226,18 +226,16 @@ function StatCard({
     value,
     icon,
     accentCls,
-    iconCls,
 }: {
     label: string;
     value: string | number;
     icon: React.ReactNode;
     accentCls: string;
-    iconCls: string;
 }) {
     return (
         <div className="relative bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow duration-200">
             <div className={`absolute inset-y-0 left-0 w-[3px] rounded-r-full ${accentCls}`} />
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 p-2.5 ${iconCls}`}>{icon}</div>
+            {/* <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 p-2.5 ${iconCls}`}>{icon}</div> */}
             <div>
                 <div className="text-2xl font-black text-slate-900 tabular-nums leading-none">{value}</div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{label}</div>
@@ -556,34 +554,40 @@ export default function FeedbackPage() {
                         </div>
 
                         {/* ── Stats: always 1×4 ── */}
-                        <div className="flex space-between gap-4">
+                        <div
+                            style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                                gap: "1.5rem",
+                            }}
+                        >
                             <StatCard
                                 label="Total Responses"
                                 value={pagination.total}
                                 icon={<IC.Chat />}
                                 accentCls="bg-gradient-to-b from-slate-500 to-slate-700"
-                                iconCls="bg-slate-100 text-slate-600"
+                                // iconCls="bg-slate-100 text-slate-600"
                             />
                             <StatCard
                                 label="Free Summary"
                                 value={surveys.filter((s) => s.survey_type === "free_summary").length}
                                 icon={<IC.FileText />}
                                 accentCls="bg-gradient-to-b from-sky-400 to-blue-500"
-                                iconCls="bg-sky-50 text-sky-600"
+                                // iconCls="bg-sky-50 text-sky-600"
                             />
                             <StatCard
                                 label="Full Breakdown"
                                 value={surveys.filter((s) => s.survey_type === "full_breakdown").length}
                                 icon={<IC.Star />}
                                 accentCls="bg-gradient-to-b from-teal-400 to-emerald-500"
-                                iconCls="bg-teal-50 text-teal-600"
+                                // iconCls="bg-teal-50 text-teal-600"
                             />
                             <StatCard
                                 label="Avg Rating"
                                 value={avgRating}
                                 icon={<IC.BarChart />}
                                 accentCls="bg-gradient-to-b from-amber-400 to-orange-500"
-                                iconCls="bg-amber-50 text-amber-600"
+                                // iconCls="bg-amber-50 text-amber-600"
                             />
                         </div>
 
