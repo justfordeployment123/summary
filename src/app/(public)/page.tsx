@@ -305,7 +305,7 @@ export default function Home() {
 
                 const messages: Record<string, string> = {
                     PAYMENT_CONFIRMED: "Payment confirmed — queuing your detailed breakdown…",
-                    PAID_BREAKDOWN_GENERATING: "AI is building your section-by-section breakdown… (~15 seconds)",
+                    PAID_BREAKDOWN_GENERATING: "Automated System is building your section-by-section breakdown… (~15 seconds)",
                 };
                 setPollStatus(messages[data.status] ?? "Processing your breakdown…");
             } catch (err) {

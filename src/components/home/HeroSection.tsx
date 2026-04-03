@@ -8,19 +8,12 @@ const beforeText = `"We are writing to inform you that your recent test results 
 const afterText = `This letter is from St George's Hospital NHS Trust confirming that your recent test results have been reviewed. No immediate concerns have been identified, but you are invited to a follow-up appointment on 12 May 2026 for ongoing monitoring. While not urgent, it is important to attend or reschedule to ensure continued care.`;
 
 const floatingCategories = [
-    "Medical or Health letter",
-    "Money owed or payment letter",
-    "Court or legal notice",
-    "Work or employment issue",
-    "Insurance letter",
-    "Bank or financial letter",
-    "Government or tax letter",
-    "Housing, rent or mortgage",
-    "Utility or service provider",
-    "School or education",
-    "Benefits or welfare",
-    "Subscription or contract issue",
-    "I'm not sure",
+    "Medical / Health Letters",
+    "Money Owed Letters",
+    "Court / Legal Letters",
+    "Benefit Letters",
+    "Parking Fine Letters",
+    "Tax Letters",
 ];
 
 export function HeroSection({ onScrollToUpload }: HeroSectionProps) {

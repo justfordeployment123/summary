@@ -51,7 +51,7 @@ const PAGE_META: Record<string, { icon: React.ReactNode; description: string }> 
         ),
     },
     prompts: {
-        description: "Edit AI prompts and instructions",
+        description: "Edit prompts and instructions",
         icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path

@@ -107,7 +107,7 @@ export default function AdminDashboard() {
     }
 
     async function regenerateJob(jobId: string) {
-        if (!confirm("Re-trigger the paid AI breakdown for this failed job? This will use OpenAI tokens.")) return;
+        if (!confirm("Re-trigger the paid breakdown for this failed job? This will use OpenAI tokens.")) return;
 
         setRegenState((s) => ({ ...s, [jobId]: "loading" }));
         setRegenMsg((s) => ({ ...s, [jobId]: "" }));
@@ -186,7 +186,7 @@ export default function AdminDashboard() {
                             <div>
                                 <p className="font-semibold text-amber-900 text-sm">Monthly OpenAI cap at {capPercent}%</p>
                                 <p className="text-amber-700 text-xs mt-0.5">
-                                    Paid AI generation will be automatically disabled at 100%. Adjust the cap in Settings.
+                                    Paid generation will be automatically disabled at 100%. Adjust the cap in Settings.
                                 </p>
                             </div>
                         </div>
@@ -319,7 +319,7 @@ export default function AdminDashboard() {
                             <span className="font-semibold text-slate-600 tabular-nums">{stats.tokenUsageMonth?.toLocaleString()} used</span>
                             <span>Cap: {stats.tokenCapMonth?.toLocaleString()}</span>
                         </div>
-                        <p className="text-xs text-slate-400">Paid AI generation disables automatically at 100%.</p>
+                        <p className="text-xs text-slate-400">Paid generation disables automatically at 100%.</p>
                     </div>
                 </div>
             </div>
@@ -456,7 +456,7 @@ export default function AdminDashboard() {
                                                                 <span
                                                                     className={`text-[10px] leading-tight max-w-36 ${rs === "success" ? "text-emerald-600" : "text-red-500"}`}
                                                                 >
-                                                                    {rs === "success" ? "AI generation started" : regenMsg[job.jobId].split(".")[0]}
+                                                                    {rs === "success" ? "Generation started" : regenMsg[job.jobId].split(".")[0]}
                                                                 </span>
                                                             )}
                                                         </div>

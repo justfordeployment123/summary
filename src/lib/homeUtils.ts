@@ -23,7 +23,7 @@ export const PROCESS_STEPS = [
     "Requesting secure upload URL…",
     "Uploading document to secure storage…",
     "Reading and extracting document text…",
-    "AI is analysing your letter…",
+    "Automated Technology is analysing your letter…",
     "Summary ready.",
 ] as const;
 

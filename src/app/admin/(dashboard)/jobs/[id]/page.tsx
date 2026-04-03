@@ -151,7 +151,7 @@ export default function JobDetailPage() {
     }
 
     async function regenerate() {
-        if (!confirm("Re-trigger the paid AI breakdown for this failed job? This will use OpenAI tokens.")) return;
+        if (!confirm("Re-trigger the paid breakdown for this failed job? This will use OpenAI tokens.")) return;
         try {
             await adminApi.regenerateJob(jobId);
             setActionMsg({
@@ -516,7 +516,7 @@ export default function JobDetailPage() {
                     {job.regenerationLog.length === 0 ? (
                         <p className="text-sm text-slate-400 px-6 py-5">
                             No regeneration attempts yet.
-                            {job.canRegenerate ? " Click Regenerate above to retry the AI breakdown." : ""}
+                            {job.canRegenerate ? " Click Regenerate above to retry the breakdown." : ""}
                         </p>
                     ) : (
                         <div className="divide-y divide-slate-100">

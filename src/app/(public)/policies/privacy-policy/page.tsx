@@ -350,7 +350,7 @@ export default function PrivacyPolicyPage() {
                         </div>
 
                         {/* Section 5: Your rights */}
-                        <div className="policy-card animate-fade-up" style={{ animationDelay: "500ms" }}>
+                        {/* <div className="policy-card animate-fade-up" style={{ animationDelay: "500ms" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                                 <div
                                     style={{
@@ -421,7 +421,7 @@ export default function PrivacyPolicyPage() {
                                     </div>
                                 ))}
                             </div>
-                        </div>
+                        </div> */}
 
                         {/* Section 6: Contact */}
                         <div
@@ -457,9 +457,9 @@ export default function PrivacyPolicyPage() {
                                 </div>
                                 <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Contact Us</h2>
                             </div>
-                            <p style={{ fontSize: "0.95rem", color: "#0e4f52", lineHeight: 1.7, margin: 0 }}>
+                            {/* <p style={{ fontSize: "0.95rem", color: "#0e4f52", lineHeight: 1.7, margin: 0 }}>
                                 If you have any privacy-related questions, or would like to exercise your data rights, please contact us.
-                            </p>
+                            </p> */}
                             <div style={{ marginTop: 8 }}>
                                 <Link
                                     href="/contact"

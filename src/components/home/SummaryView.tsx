@@ -532,7 +532,7 @@ export function SummaryView({
                                 )}
                             </div>
                             <span style={{ fontSize: "0.86rem", color: "#475569", lineHeight: 1.65, fontWeight: 500 }}>
-                                I understand this is an AI-generated summary and not professional advice. I accept the{" "}
+                                I understand this is an Automated Technology-generated summary and not professional advice. I accept the{" "}
                                 <span style={{ color: "#12A1A6", fontWeight: 700 }}>Terms of Service</span>.
                             </span>
                         </label>

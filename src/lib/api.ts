@@ -112,7 +112,7 @@ export async function generateFreeSummary(data: GenerateFreePayload): Promise<Ge
 
     if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to generate AI summary.");
+        throw new Error(errorData.error || "Failed to generate summary.");
     }
 
     return res.json();

@@ -14,11 +14,11 @@ type StatusMsg = { type: "success" | "error" | "info"; text: string };
 // prompt stage, so it cannot be an input to the free prompt itself.
 const PLACEHOLDERS: Record<"free" | "paid", { token: string; desc: string }[]> = {
     free: [
-        { token: "{{document_text}}", desc: "Full extracted letter text sent to the AI" },
+        { token: "{{document_text}}", desc: "Full extracted letter text sent to the model" },
         { token: "{{category}}", desc: "The letter category selected by the user (e.g. Legal, Medical)" },
     ],
     paid: [
-        { token: "{{document_text}}", desc: "Full extracted letter text sent to the AI" },
+        { token: "{{document_text}}", desc: "Full extracted letter text sent to the model" },
         { token: "{{category}}", desc: "The letter category selected by the user (e.g. Legal, Medical)" },
         { token: "{{urgency}}", desc: "Urgency from the free summary (Routine / Important / Time-Sensitive)" },
     ],
@@ -215,7 +215,7 @@ export default function AdminPromptsPage() {
                 <div>
                     <h1 className="text-xl font-bold text-slate-800">Prompt Templates</h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        Manage the AI instructions used to generate summaries and breakdowns. Changes take effect immediately — no redeployment
+                        Manage the instructions used to generate summaries and breakdowns. Changes take effect immediately — no redeployment
                         needed.
                     </p>
                 </div>

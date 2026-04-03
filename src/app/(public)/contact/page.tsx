@@ -170,7 +170,7 @@ export default function ContactPage() {
                                 </div>
                             </div>
 
-                            <div
+                            {/* <div
                                 style={{
                                     marginTop: 32,
                                     padding: "18px",
@@ -183,7 +183,7 @@ export default function ContactPage() {
                                     <strong style={{ color: "#54D6D4" }}>For data-related requests</strong> — including data deletion, access, or
                                     corrections — please email us and we will respond in accordance with our obligations under UK GDPR.
                                 </p>
-                            </div>
+                            </div> */}
                         </div>
                     </div>
 
