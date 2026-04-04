@@ -3,9 +3,9 @@
 import type { HeroSectionProps } from "@/types/home";
 import { useEffect, useRef } from "react";
 
-const beforeText = `"We are writing to inform you that your recent test results have now been reviewed by the relevant department. Based on the findings, no immediate concerns have been identified at this stage. However, as part of ongoing monitoring, you are required to attend a follow-up appointment scheduled for 12 May 2026..."`;
+const beforeText = `"You are hereby notified that a claim has been issued against you in the County Court Business Centre for the sum of £1,250. You must respond to this claim within 14 days of service. Failure to respond may result in judgment being entered against you without further notice."`;
 
-const afterText = `This letter is from St George's Hospital NHS Trust confirming that your recent test results have been reviewed. No immediate concerns have been identified, but you are invited to a follow-up appointment on 12 May 2026 for ongoing monitoring. While not urgent, it is important to attend or reschedule to ensure continued care.`;
+const afterText = `The County Court Business Centre has issued a formal legal claim against you for £1,250. You must respond within 14 days. This is a formal legal step, not a warning. If you ignore it, a default judgment may be registered against you, affecting your credit. You should review the claim details and decide on your legal response quickly.`;
 
 const floatingCategories = [
     "Medical / Health Letters",
@@ -19,52 +19,90 @@ const floatingCategories = [
 export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
+        if (window.innerWidth < 768) return;
         const container = containerRef.current;
         if (!container) return;
         const NUM = 14;
-        const slots: { el: HTMLDivElement; active: boolean }[] = [];
         const rand = (a: number, b: number) => Math.random() * (b - a) + a;
 
+        // Only spawn in the left and right wings, avoiding the centre
+        const spawnZones = [
+            { xMin: 1, xMax: 18 }, // left wing
+            { xMax: 99, xMin: 76 }, // right wing
+        ];
+
+        const slots: { el: HTMLDivElement; zone: (typeof spawnZones)[0] }[] = [];
+
         for (let i = 0; i < NUM; i++) {
+            const zone = spawnZones[i % 2];
             const el = document.createElement("div");
-            el.style.cssText = `position:absolute;color:rgba(180,200,210,0.18);font-family:'Raleway',sans-serif;
-      font-size:${rand(0.62, 0.82)}rem;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;
-      white-space:nowrap;opacity:0;transition:opacity 1.8s ease;user-select:none;
-      top:${rand(4, 92)}%;left:${rand(2, 85)}%`;
+            el.style.cssText = `
+            position:absolute;
+            color:rgba(180,200,210,0.18);
+            font-family:'Raleway',sans-serif;
+            font-size:${rand(0.62, 0.82)}rem;
+            font-weight:700;
+            letter-spacing:0.09em;
+            text-transform:uppercase;
+            white-space:nowrap;
+            opacity:0;
+            user-select:none;
+            top:${rand(6, 88)}%;
+            left:${rand(zone.xMin, zone.xMax)}%;
+            transition: opacity 1.8s ease, transform 0s linear;
+        `;
             container.appendChild(el);
-            slots.push({ el, active: false });
+            slots.push({ el, zone });
         }
 
-        function cycleSlot(slot: { el: HTMLDivElement; active: boolean }) {
-            if (slot.active) {
-                slot.el.style.opacity = "0";
-                slot.active = false;
-                setTimeout(() => cycleSlot(slot), rand(2000, 5000) + 1800);
-            } else {
-                slot.el.textContent = floatingCategories[Math.floor(Math.random() * floatingCategories.length)];
-                slot.el.style.opacity = "1";
-                slot.active = true;
-                setTimeout(() => cycleSlot(slot), rand(3000, 7000));
-            }
+        function animateSlot(slot: { el: HTMLDivElement; zone: (typeof spawnZones)[0] }) {
+            const { el, zone } = slot;
+            const text = floatingCategories[Math.floor(Math.random() * floatingCategories.length)];
+            const startX = rand(zone.xMin, zone.xMax);
+            const direction = zone.xMin < 30 ? 1 : -1; // left zone drifts right, right zone drifts left
+            const driftPx = rand(30, 70) * direction;
+            const duration = rand(8000, 14000);
+            const top = rand(6, 88);
+
+            el.textContent = text;
+            el.style.top = `${top}%`;
+            el.style.left = `${startX}%`;
+            el.style.transform = `translateX(0px)`;
+            el.style.transition = `opacity 1.8s ease`;
+            el.style.opacity = "1";
+
+            // Start drifting
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    el.style.transition = `opacity 1.8s ease, transform ${duration}ms linear`;
+                    el.style.transform = `translateX(${driftPx}px)`;
+                });
+            });
+
+            // Fade out partway through
+            setTimeout(() => {
+                el.style.opacity = "0";
+            }, duration * 0.65);
+
+            // Restart after full cycle
+            setTimeout(
+                () => {
+                    el.style.transition = "none";
+                    el.style.transform = "translateX(0px)";
+                    animateSlot(slot);
+                },
+                duration + rand(1000, 3000),
+            );
         }
 
         slots.forEach((slot, i) => {
-            setTimeout(
-                () => {
-                    slot.el.textContent = floatingCategories[Math.floor(Math.random() * floatingCategories.length)];
-                    slot.el.style.opacity = "1";
-                    slot.active = true;
-                    setTimeout(() => cycleSlot(slot), rand(3000, 7000));
-                },
-                i * rand(200, 600),
-            );
+            setTimeout(() => animateSlot(slot), i * rand(200, 700));
         });
 
         return () => {
             container.innerHTML = "";
         };
     }, []);
-
     return (
         <section
             style={{
