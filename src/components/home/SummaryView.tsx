@@ -25,6 +25,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
                 textTransform: "uppercase",
                 marginBottom: 10,
                 display: "flex",
+                justifyContent: "center",
                 alignItems: "center",
                 gap: 8,
             }}
@@ -229,20 +230,9 @@ export function SummaryView({
                 </div>
 
                 {/* Summary body */}
-                <div style={{ padding: "32px 36px" }}>
+                <div style={{ padding: "38px 5px" }}>
                     <SectionLabel>Plain English Summary</SectionLabel>
-                    {/* <p
-                        style={{
-                            color: "#1e293b",
-                            lineHeight: 1.85,
-                            fontSize: "1.05rem",
-                            fontWeight: 500,
-                            margin: 0,
-                            letterSpacing: "0.005em",
-                        }}
-                    >
-                        {summaryData.summary}
-                    </p> */}
+                    
                     <div dangerouslySetInnerHTML={{ __html: markdownToHtml(summaryData.summary) }} />
                     <div style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
                         <FeedbackButton onClick={() => setFeedbackOpen(true)} label="Rate this summary" />

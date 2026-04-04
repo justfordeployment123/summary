@@ -17,14 +17,14 @@ const s3Client = new S3Client({
 });
 
 const ALLOWED_MIME_TYPES = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "image/jpeg", "image/png"];
+const DAILY_LIMIT = 5;
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        // Here, 'category' is actually the Category DB _id sent from the frontend
         const { fileName, fileType, category: categoryId, firstName, email, marketingConsent, turnstileToken } = body;
 
-        // 1. Verify Turnstile token FIRST before doing anything else
+        // 1. Verify Turnstile token
         const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
             method: "POST",
             body: new URLSearchParams({
@@ -37,25 +37,45 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Security check failed. Please try again." }, { status: 403 });
         }
 
-        // 1. Initial Server-Side Validation
+        // 2. File type validation
         if (!ALLOWED_MIME_TYPES.includes(fileType)) {
             return NextResponse.json({ error: "Invalid file type." }, { status: 400 });
         }
 
-        // 2. Connect to MongoDB early to validate category
+        // 3. Connect to MongoDB
         await dbConnect();
 
-        // 3. Securely lookup the actual category name
+        // 4. Validate category
         const matchedCategory = await Category.findById(categoryId);
         if (!matchedCategory || !matchedCategory.is_active) {
             return NextResponse.json({ error: "Invalid or inactive category selected." }, { status: 400 });
         }
 
-        // 4. Generate secure UUIDs for S3 and our Reference ID
+        // 5. Per-email daily rate limit check
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const todayCount = await Job.countDocuments({
+            user_email: email,
+            created_at: { $gte: startOfDay }, // ← was createdAt, must be created_at
+        }); 
+
+        if (todayCount >= DAILY_LIMIT) {
+            return NextResponse.json(
+                {
+                    error: "Daily limit reached: You have already used your 5 free summaries for today.",
+                    message: "You've used your 5 free summaries for today. Your limit resets at midnight — come back tomorrow!",
+                    remaining: 0,
+                },
+                { status: 429 },
+            );
+        }
+
+        // 6. Generate secure UUID for S3
         const fileExtension = fileName.split(".").pop();
         const s3Key = `${uuidv4()}.${fileExtension}`;
 
-        // 5. Create the Presigned URL command
+        // 7. Create presigned URL
         const command = new PutObjectCommand({
             Bucket: process.env.AWS_S3_BUCKET_NAME!,
             Key: s3Key,
@@ -64,17 +84,17 @@ export async function POST(request: Request) {
 
         const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 60 });
 
-        // 6. Create the Job Record using both the ID and the secure DB name
-        // 6. Create the Job Record
+        // 8. Create Job record
         const newJob = await Job.create({
             reference_id: s3Key,
-            category_id: matchedCategory._id, // Now natively handles the ObjectId reference!
+            category_id: matchedCategory._id,
             user_email: email,
             user_name: firstName,
             marketing_consent: marketingConsent || false,
             status: JobState.UPLOADED,
         });
-        // 7. Write the initial state to the JobStateLog
+
+        // 9. Write initial state log
         await JobStateLog.create({
             job_id: newJob._id,
             from_state: "INIT",
@@ -82,13 +102,14 @@ export async function POST(request: Request) {
             triggered_by: "system_upload_init",
         });
 
-        // 8. Return the URL and the secure keys to the frontend
+        // 10. Return presigned URL and job details
         return NextResponse.json(
             {
                 presignedUrl,
                 s3Key,
                 jobId: newJob._id,
                 accessToken: newJob.access_token,
+                remaining: DAILY_LIMIT - (todayCount + 1),
             },
             { status: 200 },
         );

@@ -63,7 +63,7 @@ export function markdownToHtml(md: string): string {
         font-family: 'Raleway', 'Helvetica Neue', sans-serif;
         max-width: 850px;
         margin: 0 auto;
-        padding: 60px 32px;
+        padding: 0px 32px;
         color: #1e293b;
         background: #ffffff;
         line-height: 1.8;
