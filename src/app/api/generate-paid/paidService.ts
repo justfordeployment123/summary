@@ -13,7 +13,7 @@
 //   • Token usage & cost logging
 //   • Global monthly cap check
 //   • Alert email sent on every request when usage is at or above threshold
-//   • OpenAI model read from Settings DB (openai_model key) — falls back to gpt-4.1
+//   • OpenAI model read from Settings DB (openai_model key) — falls back to gpt-4o
 
 import OpenAI from "openai";
 import connectToDatabase from "@/lib/db";
@@ -33,19 +33,20 @@ const MAX_RETRIES = 3;
 const BACKOFF_DELAYS = [0, 2000, 5000];
 const DEFAULT_MAX_OUTPUT_TOKENS = 2000;
 const DEFAULT_MAX_INPUT_TOKENS = 4000;
-const DEFAULT_MODEL = "gpt-4.1";
+const DEFAULT_MODEL = "gpt-4o"; // FIX: Updated from invalid "gpt-4.1"
 const COST_PER_1M_INPUT = 2.0;
 const COST_PER_1M_OUTPUT = 8.0;
 
+// FIX: Updated to require Proper Markdown, fixed numbering, and kept the URGENCY line unformatted.
 const MANDATORY_PAID_RULES = `
 
 ---
 MANDATORY SYSTEM INSTRUCTIONS (These override any previous instructions):
 1. Do NOT provide legal, financial, or professional advice under any circumstances.
-2. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: [Level]
-3. The [Level] MUST be exactly one of these three words: Routine, Important, or Time-Sensitive.
-4. Do NOT use any colours, HTML, or extra text for the urgency label. It must be plain, unformatted text.
-4. It should be Proper Markdown formatting, but the URGENCY line MUST be the last line of your response with no additional text or whitespace after it.
+2. You MUST format your response using Proper Markdown (e.g., bolding, bullet points, headers) for readability.
+3. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: [Level]
+4. The [Level] MUST be exactly one of these three words: Routine, Important, or Time-Sensitive.
+5. Do NOT use any Markdown, colours, HTML, or extra text for the final urgency label. The URGENCY line MUST be plain text and MUST be the absolute last line of your response with no additional text or whitespace after it.
 
 
 URGENCY CLASSIFICATION RULES:
@@ -148,6 +149,7 @@ function hydratePlaceholders(
     );
 }
 
+// FIX: Updated to align with Markdown instruction.
 function buildFallbackPrompt(categoryName: string, documentText: string, upsellInstructions: string): string {
     return `You are an expert document analyst. Produce a detailed section-by-section breakdown of the following ${categoryName} letter.
 
@@ -161,9 +163,10 @@ Structure your breakdown as follows:
 ${upsellInstructions}
 
 Rules:
-- Use plain English throughout
-- Highlight deadlines and required actions prominently
-- Be specific and actionable
+- Format the breakdown using Proper Markdown.
+- Use plain English vocabulary throughout.
+- Highlight deadlines and required actions prominently.
+- Be specific and actionable.
 
 Document text:
 ${documentText}

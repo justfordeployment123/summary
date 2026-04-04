@@ -10,7 +10,7 @@
 //   • Global monthly token cap check (§9.2)
 //   • Alert email sent on every request when usage is at or above threshold
 //   • Category-specific prompt fetched from DB (§10.2) — falls back to hardcoded default
-//   • OpenAI model read from Settings DB (openai_model key) — falls back to gpt-4.1
+//   • OpenAI model read from Settings DB (openai_model key) — falls back to gpt-4o
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -29,12 +29,11 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const INPUT_WORD_HARD_CAP = 1200;
 const FREE_SUMMARY_MIN_WORDS = 100;
-const FREE_SUMMARY_MAX_WORDS = 130;
 const MAX_RETRIES = 3;
 const BACKOFF_DELAYS = [0, 2000, 5000];
 const DEFAULT_MAX_OUTPUT_TOKENS = 300;
 const DEFAULT_MAX_INPUT_TOKENS = 2000;
-const DEFAULT_MODEL = "gpt-4.1";
+const DEFAULT_MODEL = "gpt-4o";
 const COST_PER_1M_INPUT = 2.0;
 const COST_PER_1M_OUTPUT = 8.0;
 
@@ -66,14 +65,15 @@ async function sleep(ms: number) {
 
 // ─── Mandatory urgency rules appended to every prompt ────────────────────────
 
+// FIX: Updated to require Proper Markdown, but kept the URGENCY line unformatted.
 const MANDATORY_URGENCY_RULES = `
 
 ---
 MANDATORY SYSTEM INSTRUCTIONS FOR URGENCY FORMATTING:
-1. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: [Level]
-2. The [Level] MUST be exactly one of these three words: Routine, Important, or Time-Sensitive.
-3. Do NOT use any colours, HTML, or extra text for the urgency label. It must be plain, unformatted text.
-4. It should be Proper Markdown formatting, but the URGENCY line MUST be the last line of your response with no additional text or whitespace after it.
+1. You MUST format your response using Proper Markdown (e.g., bolding, bullet points, headers) for readability.
+2. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: [Level]
+3. The [Level] MUST be exactly one of these three words: Routine, Important, or Time-Sensitive.
+4. Do NOT use any Markdown, colours, HTML, or extra text for the final urgency label. The URGENCY line MUST be plain text and MUST be the absolute last line of your response with no additional text or whitespace after it.
 
 
 URGENCY CLASSIFICATION RULES:
@@ -131,17 +131,19 @@ function hydratePlaceholders(template: string, vars: { categoryName: string; doc
     return template.replace(/\{\{document_text\}\}/g, vars.documentText).replace(/\{\{category\}\}/g, vars.categoryName);
 }
 
+// FIX: Updated fallback prompt to encourage Markdown formatting while strictly enforcing the word count.
 function buildFallbackPrompt(categoryName: string, documentText: string): string {
-    return `You are a plain-English document simplifier.
+    return `You are an expert document simplifier.
 The user has uploaded a ${categoryName} letter.
 
-Summarise the letter in EXACTLY 100-130 words of plain English. 
+Summarise the letter in EXACTLY 100-130 words. 
 
 Rules:
-- No more than 130 words, no fewer than 100 words
-- Plain English only — no jargon, no legal language
-- Be specific about what the letter says and what the recipient needs to know
-- Do NOT include professional advice
+- Format the summary using Proper Markdown (e.g., bolding for emphasis, bullet points if needed).
+- Use simple, plain English vocabulary — no jargon, no legal language.
+- STRICT WORD COUNT: No more than 130 words, no fewer than 100 words.
+- Be specific about what the letter says and what the recipient needs to know.
+- Do NOT include professional advice.
 
 Document text:
 ${documentText}
@@ -233,7 +235,10 @@ export async function POST(req: Request) {
                     throw new Error(`AI output failed validation on attempt ${attempt + 1}. Word count: ${countWords(summary)}`);
                 }
 
-                summary = truncateToWordCap(summary, FREE_SUMMARY_MAX_WORDS);
+                // FIX: Removed the summary = truncateToWordCap(...) line here.
+                // We must rely on the LLM adhering to the 130-word limit in the prompt.
+                // Hard-slicing a Markdown string will result in broken/unclosed tags (e.g. cutting off a ** or ```)
+
                 lastError = null;
                 break;
             } catch (err: any) {
@@ -270,7 +275,6 @@ export async function POST(req: Request) {
         // ── 10. Increment monthly usage counter & check threshold for alert ──
         const usageResult = await checkAndIncrementMonthlyUsage(tokensIn + tokensOut);
 
-        // Fire alert email on every request while at or above threshold (fire-and-forget)
         if (usageResult.aboveThreshold) {
             maybeSendCapAlert({
                 usedTokens: usageResult.currentUsage,
