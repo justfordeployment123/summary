@@ -1,7 +1,7 @@
 "use client";
 
 import { Elements } from "@stripe/react-stripe-js";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Spinner, CheckIcon } from "@/components/home/primitives";
 import { UpsellCard } from "@/components/home/cards";
@@ -79,6 +79,20 @@ export function SummaryView({
     accessToken,
 }: SummaryViewProps) {
     const [feedbackOpen, setFeedbackOpen] = useState(false);
+    const [disclaimerText, setDisclaimerText] = useState<string>();
+
+    useEffect(() => {
+        const fetchDisclaimerText = async () => {
+            try {
+                const response = await fetch("/api/admin/settings");
+                const data = await response.json();
+                setDisclaimerText(data.settings.disclaimer_text);
+            } catch {
+                console.error("Failed to fetch disclaimer text");
+            }
+        };
+        fetchDisclaimerText();
+    }, []);
 
     const urgency = summaryData?.urgency && URGENCY_CONFIG[summaryData.urgency] ? URGENCY_CONFIG[summaryData.urgency] : URGENCY_CONFIG["Routine"];
 
@@ -269,9 +283,7 @@ export function SummaryView({
                     </svg>
                 </div>
                 <p style={{ fontSize: "0.83rem", color: "#78350f", lineHeight: 1.65, margin: 0 }}>
-                    <strong style={{ color: "#92400e" }}>Important:</strong> This is an AI-generated summary for general informational purposes only.
-                    It does not constitute legal, financial, medical, or professional advice. Always consult a qualified professional before acting on
-                    any document.
+                    <strong style={{ color: "#92400e" }}>Important:</strong> {disclaimerText}
                 </p>
             </div>
 
@@ -353,9 +365,13 @@ export function SummaryView({
                         <SectionLabel>What&apos;s Included</SectionLabel>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
                             {[
+                                { icon: "�", text: "Detailed explanation" },
                                 { icon: "📄", text: "Section-by-section structured breakdown" },
-                                { icon: "⏰", text: "Required actions & key deadlines" },
-                                { icon: "💬", text: "Plain-English clause explanations" },
+                                { icon: "⚠️", text: "Key risks explained" },
+                                { icon: "📅", text: "Important dates highlighted" },
+                                { icon: "➡️", text: "What could happen next" },
+                                { icon: "❓", text: "Questions to ask" },
+                                { icon: "✅", text: "Possible next steps" },
                                 { icon: "⬇️", text: "Downloadable PDF, Word & text" },
                             ].map(({ icon, text }) => (
                                 <div

@@ -20,9 +20,9 @@ const DEFAULT_SETTINGS = {
     stuck_job_timeout_minutes:       5,
     max_regeneration_attempts:       3,
     disclaimer_text:
-        "This service provides an AI-generated summary for general informational purposes only. It does not constitute legal, financial, medical, or professional advice. You should always seek advice from a qualified professional before acting on any document.",
+        "This service provides an automated summary for general informational purposes only. It does not constitute legal, financial, medical, or professional advice. You should always seek advice from a qualified professional before acting on any document.",
     disclaimer_checkbox_label:
-        "I understand this is an AI-generated summary and not professional advice.",
+        "I understand this is an automated technology summary and not professional advice.",
     // §21 — "Job metadata: 12 months. Admin-triggered or scheduled cleanup. Configurable."
     job_metadata_retention_days: 365,
 };
