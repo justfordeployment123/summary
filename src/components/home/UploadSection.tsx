@@ -170,6 +170,9 @@ export function UploadSection({
                                             <path d="M6 9l6 6 6-6" />
                                         </svg>
                                     </div>
+                                    <p style={{ color: "#64748b", fontSize: "0.8rem", marginTop: 6, padding: "0 10px" }}>
+                                        Please choose the correct category for your letter, as the wrong selection could lead to an incorrect summary.
+                                    </p>
                                 </div>
 
                                 {/* Name + Email */}
