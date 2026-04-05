@@ -81,13 +81,19 @@ export function SummaryView({
 }: SummaryViewProps) {
     const [feedbackOpen, setFeedbackOpen] = useState(false);
     const [disclaimerText, setDisclaimerText] = useState<string>();
+    const [checkboxLabel, setCheckboxLabel] = useState<string>();
 
     useEffect(() => {
         const fetchDisclaimerText = async () => {
             try {
-                const response = await fetch("/api/admin/settings");
+                const response = await fetch("/api/disclaimer");
+                // console.log("Fetched disclaimer response:", response);
                 const data = await response.json();
-                setDisclaimerText(data.settings.disclaimer_text);
+                // console.log("Fetched disclaimer text:", data.disclaimer_text);
+                // console.log("Fetched disclaimer checkbox label:", data.disclaimer_checkbox_label);
+                setDisclaimerText(data.disclaimer_text);
+                setCheckboxLabel(data.disclaimer_checkbox_label);
+
             } catch {
                 console.error("Failed to fetch disclaimer text");
             }
@@ -538,7 +544,8 @@ export function SummaryView({
                                 )}
                             </div>
                             <span style={{ fontSize: "0.86rem", color: "#475569", lineHeight: 1.65, fontWeight: 500 }}>
-                                I understand this is an Automated Technology-generated summary and not professional advice. I accept the{" "}
+                                {/* I understand this is an Automated Technology-generated summary and not professional advice. I accept the{" "} */}
+                                {checkboxLabel || "I understand this is an Automated Technology-generated summary and not professional advice. I accept the"}
                                 <span style={{ color: "#12A1A6", fontWeight: 700 }}>Terms of Service</span>.
                             </span>
                         </label>
