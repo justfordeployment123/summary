@@ -22,12 +22,16 @@ export default function Home() {
     const [disclaimerAcknowledged, setDisclaimerAcknowledged] = useState(false);
 
     // ── Upload state ──────────────────────────────────────────────────────────
-    // add this state near your other useState hooks
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [currentStep, setCurrentStep] = useState(0);
     const [uploadStatus, setUploadStatus] = useState("");
     const [isError, setIsError] = useState(false);
+
+    // ── Category mismatch state ───────────────────────────────────────────────
+    const [categoryMismatch, setCategoryMismatch] = useState<{
+        suggestedCategory: string | null;
+    } | null>(null);
 
     // ── View / result state ───────────────────────────────────────────────────
     const [view, setView] = useState<ViewState>("form");
@@ -146,6 +150,7 @@ export default function Home() {
         setIsUploading(true);
         setIsError(false);
         setCurrentStep(0);
+        setCategoryMismatch(null); // reset any previous mismatch
 
         try {
             const { requestUploadUrl, uploadFileToS3, triggerOCR, generateFreeSummary } = await import("@/lib/api");
@@ -180,6 +185,14 @@ export default function Home() {
             setCurrentStep(4);
             setUploadStatus(PROCESS_STEPS[4]);
 
+            // ── Category mismatch: show mismatch screen, no payment ──
+            if (aiResult.categoryCorrect === false) {
+                setCategoryMismatch({ suggestedCategory: aiResult.suggestedCategory ?? null });
+                setView("category_mismatch");
+                return;
+            }
+
+            // ── Category correct: show normal summary + payment ──
             const data: SummaryData = {
                 summary: aiResult.summary,
                 urgency: aiResult.urgency as UrgencyLevel,
@@ -347,6 +360,7 @@ export default function Home() {
         setClientSecret(null);
         setShowPaymentForm(false);
         setIsPaymentProcessing(false);
+        setCategoryMismatch(null);
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
@@ -357,11 +371,7 @@ export default function Home() {
     return (
         <>
             <GlobalStyles />
-            {/* The layout wrapper inside the body handles the font-family and min-height now, 
-                but we'll keep this div to hold the views */}
             <div>
-                {/* Navbar is now handled globally in src/app/layout.tsx */}
-
                 {view === "form" && (
                     <div id="upload-section">
                         <HeroSection onScrollToUpload={scrollToUpload} />
@@ -390,6 +400,17 @@ export default function Home() {
                             handleSubmit={handleSubmit}
                             turnstileToken={turnstileToken}
                             setTurnstileToken={setTurnstileToken}
+                        />
+                    </div>
+                )}
+
+                {/* ── Category mismatch screen ── */}
+                {view === "category_mismatch" && (
+                    <div style={{ background: "#f8fafc", minHeight: "calc(100vh - 66px)" }}>
+                        <CategoryMismatchView
+                            categories={categories}
+                            suggestedCategory={categoryMismatch?.suggestedCategory ?? null}
+                            onRetry={handleReset}
                         />
                     </div>
                 )}
@@ -443,9 +464,280 @@ export default function Home() {
                         />
                     </div>
                 )}
-
-                {/* Footer is now handled globally in src/app/layout.tsx */}
             </div>
         </>
+    );
+}
+
+// ─── CategoryMismatchView ─────────────────────────────────────────────────────
+
+function CategoryMismatchView({
+    suggestedCategory,
+    onRetry,
+    categories,
+}: {
+    suggestedCategory: string | null;
+    onRetry: () => void;
+    categories: { _id: string; name: string }[];
+}) {
+    return (
+        <div
+            style={{
+                maxWidth: 580,
+                margin: "0 auto",
+                padding: "72px 24px 80px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 0,
+                fontFamily: "'Raleway', sans-serif",
+            }}
+        >
+            {/* Icon */}
+            <div
+                className="anim-fadeUp"
+                style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 20,
+                    background: "linear-gradient(135deg,#fff7ed,#fef3c7)",
+                    border: "1.5px solid #fde68a",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 28,
+                    flexShrink: 0,
+                }}
+            >
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="1.8">
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+                </svg>
+            </div>
+
+            {/* Main card */}
+            <div
+                className="anim-fadeUp-1"
+                style={{
+                    width: "100%",
+                    borderRadius: 24,
+                    background: "#fff",
+                    boxShadow: "0 2px 0 0 #e2e8f0, 0 8px 40px rgba(15,35,63,0.08)",
+                    border: "1px solid #f1f5f9",
+                    overflow: "hidden",
+                }}
+            >
+                {/* Header */}
+                <div
+                    style={{
+                        background: "linear-gradient(135deg, #0a1f36 0%, #0F233F 60%, #133352 100%)",
+                        padding: "32px 36px 28px",
+                        position: "relative",
+                        overflow: "hidden",
+                    }}
+                >
+                    <div
+                        style={{
+                            position: "absolute",
+                            top: -60,
+                            right: -60,
+                            width: 200,
+                            height: 200,
+                            borderRadius: "50%",
+                            background: "radial-gradient(circle, rgba(251,191,36,0.12) 0%, transparent 70%)",
+                            pointerEvents: "none",
+                        }}
+                    />
+
+                    {/* Status pill */}
+                    <div
+                        style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            background: "rgba(251,191,36,0.15)",
+                            border: "1px solid rgba(251,191,36,0.35)",
+                            borderRadius: 99,
+                            padding: "4px 14px 4px 8px",
+                            marginBottom: 14,
+                        }}
+                    >
+                        <div
+                            style={{
+                                width: 7,
+                                height: 7,
+                                borderRadius: "50%",
+                                background: "#fbbf24",
+                                boxShadow: "0 0 6px #fbbf24",
+                            }}
+                        />
+                        <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#fbbf24", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                            Category Mismatch
+                        </span>
+                    </div>
+
+                    <h2
+                        style={{
+                            fontSize: "1.75rem",
+                            fontWeight: 900,
+                            color: "#fff",
+                            lineHeight: 1.15,
+                            margin: 0,
+                            letterSpacing: "-0.02em",
+                        }}
+                    >
+                        Looks Like the Wrong{" "}
+                        <span
+                            style={{
+                                background: "linear-gradient(90deg,#fbbf24,#f59e0b)",
+                                WebkitBackgroundClip: "text",
+                                WebkitTextFillColor: "transparent",
+                            }}
+                        >
+                            Category
+                        </span>
+                    </h2>
+                    <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.5)", marginTop: 8, fontWeight: 500, lineHeight: 1.5 }}>
+                        Our system detected that your document doesn&apos;t match the category you selected.
+                    </p>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: "32px 36px", display: "flex", flexDirection: "column", gap: 20 }}>
+                    {/* Explanation */}
+                    <div
+                        style={{
+                            padding: "18px 20px",
+                            borderRadius: 16,
+                            background: "#fffbeb",
+                            border: "1px solid #fde68a",
+                            display: "flex",
+                            gap: 14,
+                            alignItems: "flex-start",
+                        }}
+                    >
+                        <div
+                            style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 10,
+                                background: "#fef3c7",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                            }}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <path strokeLinecap="round" d="M12 8v4m0 4h.01" />
+                            </svg>
+                        </div>
+                        <p style={{ fontSize: "0.87rem", color: "#78350f", lineHeight: 1.7, margin: 0 }}>
+                            To keep your results accurate and relevant, we only process documents under their correct category. Please go back and
+                            re-upload your document with the right category selected.
+                        </p>
+                    </div>
+
+                    {/* Suggested category */}
+                    {suggestedCategory && (
+                        <div
+                            style={{
+                                padding: "18px 20px",
+                                borderRadius: 16,
+                                background: "linear-gradient(135deg,#f0fdfd,#e8faf9)",
+                                border: "1.5px solid #b2eeec",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 14,
+                            }}
+                        >
+                            <div
+                                style={{
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: 10,
+                                    background: "linear-gradient(135deg,rgba(18,161,166,0.15),rgba(84,214,212,0.15))",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    flexShrink: 0,
+                                }}
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#12A1A6" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p
+                                    style={{
+                                        fontSize: "0.75rem",
+                                        fontWeight: 700,
+                                        color: "#12A1A6",
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.08em",
+                                        margin: "0 0 3px",
+                                    }}
+                                >
+                                    Suggested Category
+                                </p>
+                                <p style={{ fontSize: "1rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>{suggestedCategory}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CTA */}
+                    <button
+                        type="button"
+                        onClick={onRetry}
+                        style={{
+                            width: "100%",
+                            padding: "17px 28px",
+                            borderRadius: 16,
+                            background: "linear-gradient(135deg,#0F233F,#1a3a5c)",
+                            color: "#fff",
+                            border: "none",
+                            fontFamily: "Raleway, sans-serif",
+                            fontWeight: 800,
+                            fontSize: "1rem",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 10,
+                            boxShadow: "0 4px 20px rgba(15,35,63,0.25), 0 1px 0 rgba(255,255,255,0.1) inset",
+                            letterSpacing: "0.01em",
+                            position: "relative",
+                            overflow: "hidden",
+                        }}
+                    >
+                        {/* Teal accent stripe */}
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: 4,
+                                background: "linear-gradient(180deg,#54D6D4,#12A1A6)",
+                                borderRadius: "16px 0 0 16px",
+                            }}
+                        />
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5m7-7l-7 7 7 7" />
+                        </svg>
+                        Go Back &amp; Re-upload
+                    </button>
+
+                    <p style={{ fontSize: "0.78rem", color: "#94a3b8", textAlign: "center", margin: 0, fontWeight: 500 }}>
+                        No charge has been made. You can re-upload with the correct category at no cost.
+                    </p>
+                </div>
+            </div>
+        </div>
     );
 }

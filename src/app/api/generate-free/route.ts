@@ -11,6 +11,7 @@
 //   • Alert email sent on every request when usage is at or above threshold
 //   • Category-specific prompt fetched from DB (§10.2) — falls back to hardcoded default
 //   • OpenAI model read from Settings DB (openai_model key) — falls back to gpt-4o
+//   • Category validation: AI checks if document matches the selected category
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -18,6 +19,7 @@ import dbConnect from "@/lib/db";
 import { Job } from "@/models/Job";
 import { Setting } from "@/models/Setting";
 import { Prompt } from "@/models/Prompt";
+import { Category } from "@/models/Category";
 import { JobState } from "@/types/job";
 import { JobToken } from "@/models/JobToken";
 import { checkAndIncrementMonthlyUsage } from "@/lib/tokenBudget";
@@ -31,7 +33,7 @@ const INPUT_WORD_HARD_CAP = 1200;
 const FREE_SUMMARY_MIN_WORDS = 100;
 const MAX_RETRIES = 3;
 const BACKOFF_DELAYS = [0, 2000, 5000];
-const DEFAULT_MAX_OUTPUT_TOKENS = 300;
+const DEFAULT_MAX_OUTPUT_TOKENS = 500; // bumped slightly to fit JSON wrapper
 const DEFAULT_MAX_INPUT_TOKENS = 2000;
 const DEFAULT_MODEL = "gpt-4o";
 const COST_PER_1M_INPUT = 2.0;
@@ -63,31 +65,102 @@ async function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ─── Mandatory urgency rules appended to every prompt ────────────────────────
+// ─── Parse JSON from AI response safely ──────────────────────────────────────
 
-// FIX: Updated to require Proper Markdown, but kept the URGENCY line unformatted.
-const MANDATORY_URGENCY_RULES = `
+interface AIJsonResponse {
+    categoryCorrect: boolean;
+    suggestedCategory: string | null;
+    summary: string;
+    urgency: "Routine" | "Important" | "Time-Sensitive";
+}
+
+function parseAIJson(raw: string): AIJsonResponse | null {
+    try {
+        // Strip markdown code fences if present
+        const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+        const parsed = JSON.parse(cleaned);
+
+        // Validate required fields
+        if (typeof parsed.categoryCorrect !== "boolean") return null;
+        if (!["Routine", "Important", "Time-Sensitive"].includes(parsed.urgency)) {
+            parsed.urgency = "Routine";
+        }
+        if (typeof parsed.summary !== "string") parsed.summary = "";
+        if (typeof parsed.suggestedCategory !== "string") parsed.suggestedCategory = null;
+
+        return parsed as AIJsonResponse;
+    } catch {
+        return null;
+    }
+}
+
+// ─── Build the JSON-output prompt ─────────────────────────────────────────────
+
+function buildJsonPrompt(
+    categoryName: string,
+    allCategories: string[],
+    documentText: string,
+    dbPromptText?: string | null,
+): string {
+    const categoryList = allCategories.map((c) => `- ${c}`).join("\n");
+
+    const summaryInstructions = dbPromptText
+        ? hydratePlaceholders(dbPromptText, { categoryName, documentText })
+        : buildFallbackSummaryBlock(categoryName, documentText);
+
+    return `${summaryInstructions}
 
 ---
-MANDATORY SYSTEM INSTRUCTIONS FOR URGENCY FORMATTING:
-1. You MUST format your response using Proper Markdown (e.g., bolding, bullet points, headers) for readability.
-2. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: [Level]
-3. The [Level] MUST be exactly one of these three words: Routine, Important, or Time-Sensitive.
-4. Do NOT use any Markdown, colours, HTML, or extra text for the final urgency label. The URGENCY line MUST be plain text and MUST be the absolute last line of your response with no additional text or whitespace after it.
+AVAILABLE CATEGORIES:
+${categoryList}
 
+SELECTED CATEGORY: "${categoryName}"
 
-URGENCY CLASSIFICATION RULES:
-Determine the urgency level based on the specific instructions provided by the user earlier in this prompt. 
-If, and ONLY if, no specific timeframes or conditions were provided above, use these default rules:
-- Time-Sensitive: Use this if there is ANY specific deadline, due date, or court date mentioned in the text.
-- Important: Use this if there are no strict deadlines, but the issue significantly affects important aspects of the recipient's life, career, finances, or legal standing.
-- Routine: Use this for all other general or informational correspondence.`;
+---
+CRITICAL OUTPUT INSTRUCTIONS — YOU MUST RESPOND WITH ONLY VALID JSON, NO OTHER TEXT:
+
+First, determine if the document genuinely belongs to the selected category "${categoryName}".
+Then produce your response as a single JSON object with EXACTLY these four fields:
+
+{
+  "categoryCorrect": true or false,
+  "suggestedCategory": "The most appropriate category name from the list above, or null if the selected category is correct",
+  "summary": "Your 100–130 word plain English summary using Proper Markdown (bold, bullets). Write this even if the category is wrong — it helps the user understand the document.",
+  "urgency": "Routine" or "Important" or "Time-Sensitive"
+}
+
+CATEGORY VALIDATION RULES:
+- Set "categoryCorrect" to true ONLY if the document clearly and primarily belongs to "${categoryName}".
+- If the document belongs to a different category, set "categoryCorrect" to false and set "suggestedCategory" to the best matching category name from the AVAILABLE CATEGORIES list above.
+- If no category fits well, set "categoryCorrect" to false and "suggestedCategory" to null.
+- Be strict: a tax letter is NOT a legal letter, a medical letter is NOT an insurance letter, etc.
+
+URGENCY RULES (for the "urgency" field):
+- "Time-Sensitive": any specific deadline, due date, or court date mentioned.
+- "Important": no strict deadline but significantly affects finances, health, legal standing, or career.
+- "Routine": all other general or informational correspondence.
+
+SUMMARY RULES (for the "summary" field):
+- 100–130 words, plain English, Proper Markdown formatting.
+- No professional advice. Be specific about what the letter says.
+
+OUTPUT: Return ONLY the JSON object. No preamble, no explanation, no markdown fences.`;
+}
+
+function hydratePlaceholders(template: string, vars: { categoryName: string; documentText: string }): string {
+    return template.replace(/\{\{document_text\}\}/g, vars.documentText).replace(/\{\{category\}\}/g, vars.categoryName);
+}
+
+function buildFallbackSummaryBlock(categoryName: string, documentText: string): string {
+    return `You are an expert document simplifier. The user has uploaded a document they believe is a "${categoryName}" letter.
+
+Document text:
+${documentText}`;
+}
 
 // ─── DB Prompt Lookup (§10.2) ─────────────────────────────────────────────────
 
-async function resolvePromptTemplate(categoryId: string | null, categoryName: string, documentText: string): Promise<string> {
-    let dbPromptText: string | null = null;
-
+async function resolveDbPromptText(categoryId: string | null): Promise<string | null> {
     try {
         if (categoryId) {
             const categoryPrompt = await Prompt.findOne({
@@ -98,56 +171,22 @@ async function resolvePromptTemplate(categoryId: string | null, categoryName: st
                 .sort({ version: -1 })
                 .lean<{ prompt_text: string }>();
 
-            if (categoryPrompt?.prompt_text) {
-                dbPromptText = categoryPrompt.prompt_text;
-            }
+            if (categoryPrompt?.prompt_text) return categoryPrompt.prompt_text;
         }
 
-        if (!dbPromptText) {
-            const genericPrompt = await Prompt.findOne({
-                category_id: { $exists: false },
-                type: "free",
-                is_active: true,
-            })
-                .sort({ version: -1 })
-                .lean<{ prompt_text: string }>();
+        const genericPrompt = await Prompt.findOne({
+            category_id: { $exists: false },
+            type: "free",
+            is_active: true,
+        })
+            .sort({ version: -1 })
+            .lean<{ prompt_text: string }>();
 
-            if (genericPrompt?.prompt_text) {
-                dbPromptText = genericPrompt.prompt_text;
-            }
-        }
+        if (genericPrompt?.prompt_text) return genericPrompt.prompt_text;
     } catch (err) {
-        console.warn("[generate-free] Failed to load prompt from DB, using fallback:", err);
+        console.warn("[generate-free] Failed to load prompt from DB:", err);
     }
-
-    if (dbPromptText) {
-        return hydratePlaceholders(dbPromptText, { categoryName, documentText }) + MANDATORY_URGENCY_RULES;
-    }
-
-    return buildFallbackPrompt(categoryName, documentText);
-}
-
-function hydratePlaceholders(template: string, vars: { categoryName: string; documentText: string }): string {
-    return template.replace(/\{\{document_text\}\}/g, vars.documentText).replace(/\{\{category\}\}/g, vars.categoryName);
-}
-
-// FIX: Updated fallback prompt to encourage Markdown formatting while strictly enforcing the word count.
-function buildFallbackPrompt(categoryName: string, documentText: string): string {
-    return `You are an expert document simplifier.
-The user has uploaded a ${categoryName} letter.
-
-Summarise the letter in EXACTLY 100-130 words. 
-
-Rules:
-- Format the summary using Proper Markdown (e.g., bolding for emphasis, bullet points if needed).
-- Use simple, plain English vocabulary — no jargon, no legal language.
-- STRICT WORD COUNT: No more than 130 words, no fewer than 100 words.
-- Be specific about what the letter says and what the recipient needs to know.
-- Do NOT include professional advice.
-
-Document text:
-${documentText}
-${MANDATORY_URGENCY_RULES}`;
+    return null;
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -185,30 +224,35 @@ export async function POST(req: Request) {
             Setting.findOne({ key: "openai_model" }).lean<any>(),
         ]);
 
-        const maxOutputTokens: number = maxOutputTokensSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
+        const maxOutputTokens: number = (maxOutputTokensSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS) + 150; // extra headroom for JSON
         const wordCap: number = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
         const model: string = modelSetting?.value ?? DEFAULT_MODEL;
 
         // ── 4. Enforce word cap on input (§9.1) ──
         const truncatedText = truncateToWordCap(extractedText, wordCap);
 
-        // ── 5. Resolve prompt ──
+        // ── 5. Fetch all active categories for validation ──
+        const allCategories = await Category.find({ is_active: true }).lean<{ name: string }[]>();
+        const allCategoryNames = allCategories.map((c) => c.name);
+
+        // ── 6. Resolve prompt & build full prompt ──
         const category = job.category_id as any;
         const categoryId = category?._id?.toString() ?? null;
         const categoryName = category?.name ?? "General";
-        const prompt = await resolvePromptTemplate(categoryId, categoryName, truncatedText);
 
-        // ── 6. Transition to FREE_SUMMARY_GENERATING ──
+        const dbPromptText = await resolveDbPromptText(categoryId);
+        const prompt = buildJsonPrompt(categoryName, allCategoryNames, truncatedText, dbPromptText);
+
+        // ── 7. Transition to FREE_SUMMARY_GENERATING ──
         await Job.findByIdAndUpdate(jobId, {
             status: JobState.FREE_SUMMARY_GENERATING,
             previous_state: job.status,
             state_transitioned_at: new Date(),
         });
 
-        // ── 7. Retry loop with backoff (§8.1) ──
+        // ── 8. Retry loop with backoff (§8.1) ──
         let lastError: Error | null = null;
-        let summary = "";
-        let urgency = "Routine";
+        let parsedResponse: AIJsonResponse | null = null;
         let tokensIn = 0;
         let tokensOut = 0;
 
@@ -221,23 +265,24 @@ export async function POST(req: Request) {
                     max_tokens: maxOutputTokens,
                     messages: [{ role: "user", content: prompt }],
                     temperature: 0.3,
+                    // Ask for JSON if the model supports it
+                    response_format: model.startsWith("gpt-4") ? { type: "json_object" } : undefined,
                 });
 
                 const rawOutput = completion.choices[0]?.message?.content ?? "";
                 tokensIn = completion.usage?.prompt_tokens ?? 0;
                 tokensOut = completion.usage?.completion_tokens ?? 0;
 
-                const urgencyMatch = rawOutput.match(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i);
-                urgency = urgencyMatch?.[1] ?? "Routine";
-                summary = rawOutput.replace(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i, "").trim();
+                parsedResponse = parseAIJson(rawOutput);
 
-                if (!validateAIOutput(summary)) {
-                    throw new Error(`AI output failed validation on attempt ${attempt + 1}. Word count: ${countWords(summary)}`);
+                if (!parsedResponse) {
+                    throw new Error(`Failed to parse AI JSON response on attempt ${attempt + 1}. Raw: ${rawOutput.slice(0, 200)}`);
                 }
 
-                // FIX: Removed the summary = truncateToWordCap(...) line here.
-                // We must rely on the LLM adhering to the 130-word limit in the prompt.
-                // Hard-slicing a Markdown string will result in broken/unclosed tags (e.g. cutting off a ** or ```)
+                // If category is correct, validate summary length
+                if (parsedResponse.categoryCorrect && !validateAIOutput(parsedResponse.summary)) {
+                    throw new Error(`AI summary failed validation on attempt ${attempt + 1}. Word count: ${countWords(parsedResponse.summary)}`);
+                }
 
                 lastError = null;
                 break;
@@ -251,8 +296,8 @@ export async function POST(req: Request) {
             }
         }
 
-        // ── 8. All retries exhausted ──
-        if (lastError) {
+        // ── 9. All retries exhausted ──
+        if (lastError || !parsedResponse) {
             await Job.findByIdAndUpdate(jobId, {
                 status: JobState.FAILED,
                 previous_state: JobState.FREE_SUMMARY_GENERATING,
@@ -261,7 +306,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Failed to generate AI summary. Please try again." }, { status: 502 });
         }
 
-        // ── 9. Log token usage & cost (§9.1) ──
+        // ── 10. Log token usage & cost (§9.1) ──
         await JobToken.create({
             job_id: jobId,
             prompt_type: "free",
@@ -272,7 +317,7 @@ export async function POST(req: Request) {
             attempt_number: 1,
         });
 
-        // ── 10. Increment monthly usage counter & check threshold for alert ──
+        // ── 11. Increment monthly usage counter & check threshold for alert ──
         const usageResult = await checkAndIncrementMonthlyUsage(tokensIn + tokensOut);
 
         if (usageResult.aboveThreshold) {
@@ -284,16 +329,23 @@ export async function POST(req: Request) {
             }).catch((err) => console.error("[generate-free] Cap alert email error:", err));
         }
 
-        // ── 11. Transition job to FREE_SUMMARY_COMPLETE ──
+        // ── 12. Transition job state ──
+        // We store the summary regardless of category correctness (user may retry with correct category).
+        // If categoryCorrect is false, job moves to AWAITING_PAYMENT is skipped on frontend.
         await Job.findByIdAndUpdate(jobId, {
             status: JobState.FREE_SUMMARY_COMPLETE,
             previous_state: JobState.FREE_SUMMARY_GENERATING,
             state_transitioned_at: new Date(),
-            urgency,
-            free_summary: summary,
+            urgency: parsedResponse.urgency,
+            free_summary: parsedResponse.summary,
         });
 
-        return NextResponse.json({ summary, urgency });
+        return NextResponse.json({
+            summary: parsedResponse.summary,
+            urgency: parsedResponse.urgency,
+            categoryCorrect: parsedResponse.categoryCorrect,
+            suggestedCategory: parsedResponse.suggestedCategory ?? null,
+        });
     } catch (error: any) {
         console.error("[generate-free]", error);
         return NextResponse.json({ error: error.message || "Internal server error." }, { status: 500 });

@@ -29,7 +29,7 @@ export interface CompletedData {
 
 export type UrgencyLevel = "Routine" | "Important" | "Time-Sensitive";
 
-export type ViewState = "form" | "summary" | "processing_payment" | "completed";
+export type ViewState = "form" | "summary" | "processing_payment" | "completed" | "category_mismatch";
 
 // ─── Config Types ─────────────────────────────────────────────────────────────
 

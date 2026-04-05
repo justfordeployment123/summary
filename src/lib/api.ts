@@ -9,7 +9,7 @@ export interface UploadInitPayload {
     firstName: string;
     email: string;
     marketingConsent: boolean;
-    turnstileToken: string; 
+    turnstileToken: string;
 }
 
 export interface UploadInitResponse {
@@ -96,6 +96,8 @@ export interface GenerateFreePayload {
 export interface GenerateFreeResponse {
     summary: string;
     urgency: string;
+    categoryCorrect: boolean;
+    suggestedCategory: string;
 }
 
 /**
@@ -145,9 +147,7 @@ export interface CreatePaymentIntentResponse {
  * Payment confirmation is triggered by the verified webhook (payment_intent.succeeded),
  * NOT by the client (§7.2).
  */
-export async function createPaymentIntent(
-    data: CreatePaymentIntentPayload,
-): Promise<CreatePaymentIntentResponse> {
+export async function createPaymentIntent(data: CreatePaymentIntentPayload): Promise<CreatePaymentIntentResponse> {
     const res = await fetch("/api/create-payment-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -218,10 +218,7 @@ export interface JobStatusResponse {
  * The token is passed in the query string (URL Enumeration Guard, §7.3).
  * Called repeatedly until status === "COMPLETED" or "FAILED".
  */
-export async function checkJobStatus(
-    jobId: string,
-    accessToken: string,
-): Promise<JobStatusResponse> {
+export async function checkJobStatus(jobId: string, accessToken: string): Promise<JobStatusResponse> {
     const res = await fetch(`/api/jobs/${jobId}/status?token=${accessToken}`);
 
     if (!res.ok) {
@@ -271,10 +268,6 @@ export async function fetchUpsells(): Promise<UpsellsResponse> {
  * AND payment_status === confirmed before serving the file.
  * Download links expire 72 hours after job completion (server-enforced, §7.3).
  */
-export function openDownload(
-    jobId: string,
-    accessToken: string,
-    format: "pdf" | "docx" | "txt",
-): void {
+export function openDownload(jobId: string, accessToken: string, format: "pdf" | "docx" | "txt"): void {
     window.open(`/api/download/${format}?job_id=${jobId}&token=${accessToken}`, "_blank");
 }
