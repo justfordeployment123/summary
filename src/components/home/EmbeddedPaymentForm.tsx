@@ -13,6 +13,14 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
 
         setIsProcessing(true);
 
+        // ✅ Fix 1: Submit elements first (required on mobile for field validation)
+        const { error: submitError } = await elements.submit();
+        if (submitError) {
+            onError(submitError.message || "Please check your payment details.");
+            setIsProcessing(false);
+            return;
+        }
+
         const { error } = await stripe.confirmPayment({
             elements,
             confirmParams: { return_url: window.location.href },
@@ -23,6 +31,9 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
             onError(error.message || "Payment failed. Please try again.");
             setIsProcessing(false);
         } else {
+            // ✅ Fix 2: Reset processing state before calling onSuccess
+            // in case the component stays mounted
+            setIsProcessing(false);
             onSuccess();
         }
     };
@@ -41,16 +52,16 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
                 onClick={handlePay}
                 disabled={isProcessing || !stripe || !elements}
                 className="
-          w-full mt-6
-          h-14 px-4
-          rounded-xl font-bold text-base
-          bg-teal-600 hover:bg-teal-700
-          disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed
-          text-white
-          flex items-center justify-center gap-2
-          transition-all
-          shadow-md hover:shadow-lg active:scale-95 active:shadow-sm
-        "
+                    w-full mt-6
+                    h-14 px-4
+                    rounded-xl font-bold text-base
+                    bg-teal-600 hover:bg-teal-700
+                    disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed
+                    text-white
+                    flex items-center justify-center gap-2
+                    transition-all
+                    shadow-md hover:shadow-lg active:scale-95 active:shadow-sm
+                "
             >
                 {isProcessing ? (
                     <>

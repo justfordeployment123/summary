@@ -63,7 +63,7 @@ export function markdownToHtml(md: string): string {
         font-family: 'Raleway', 'Helvetica Neue', sans-serif;
         max-width: 850px;
         margin: 0 auto;
-        padding: 0px 32px;
+        padding: 0px 0px;
         color: #1e293b;
         background: #ffffff;
         line-height: 1.8;
@@ -127,7 +127,7 @@ export function markdownToHtml(md: string): string {
         const ulMatch = line.match(/^[-*]\s+(.*)/);
         if (ulMatch) {
             out.push(`
-              <div style="display: flex; gap: 18px; margin-bottom: 14px; padding-left: 12px;">
+              <div style="display: flex; gap: 18px; margin-bottom: 14px; padding-left: 8px;">
                 <div style="display: flex; flex-direction: column; align-items: center; padding-top: 12px;">
                     <div style="width: 8px; height: 8px; border-radius: 50%; background: #54D6D4; box-shadow: 0 0 0 4px #e0f2f1;"></div>
                 </div>
@@ -141,7 +141,7 @@ export function markdownToHtml(md: string): string {
         const olMatch = line.match(/^(\d+)\.\s+(.*)/);
         if (olMatch) {
             out.push(`
-              <div style="display: flex; gap: 24px; margin: 24px 0; background: #fbfcfd; padding: 24px; border-radius: 16px; border: 1px solid #f1f5f9; border-left: 5px solid #12A1A6;">
+              <div style="display: flex; gap: 24px; margin: 24px 0; background: #fbfcfd; padding: 20px 8px; border-radius: 16px; border: 1px solid #f1f5f9; border-left: 5px solid #12A1A6;">
                 <div style="
                     font-size: 1.8rem; font-weight: 900; color: #12A1A6; opacity: 0.3; line-height: 1;
                 ">${olMatch[1]}</div>
@@ -155,7 +155,7 @@ export function markdownToHtml(md: string): string {
         const termLine = line.match(/^\*\*(.+?)\*\*\s*(.*)/);
         if (termLine) {
             out.push(`
-              <div style="margin: 28px 0; padding-left: 24px; border-left: 3px solid #f1f5f9;">
+              <div style="margin: 28px 0; padding-left: 12px; border-left: 3px solid #f1f5f9;">
                 <div style="font-size: 0.9rem; font-weight: 800; color: #12A1A6; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px;">
                     ${inline(termLine[1])}
                 </div>
