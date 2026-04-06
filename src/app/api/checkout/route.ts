@@ -27,37 +27,23 @@ export async function POST(req: Request) {
 
         // ── 1. Validate disclaimer server-side (§13.2) ──
         if (!disclaimerAcknowledged) {
-            return NextResponse.json(
-                { error: "You must acknowledge the disclaimer before proceeding." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "You must acknowledge the disclaimer before proceeding." }, { status: 400 });
         }
 
         if (!jobId || !accessToken) {
-            return NextResponse.json(
-                { error: "Missing required fields: jobId, accessToken." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "Missing required fields: jobId, accessToken." }, { status: 400 });
         }
 
         // ── 2. Retrieve job & verify token (§7.3) ──
-        const job = await Job.findOne({ _id: jobId, access_token: accessToken })
-            .populate("category_id")
-            .lean<any>();
+        const job = await Job.findOne({ _id: jobId, access_token: accessToken }).populate("category_id").lean<any>();
 
         if (!job) {
-            return NextResponse.json(
-                { error: "Invalid job reference or access token." },
-                { status: 403 },
-            );
+            return NextResponse.json({ error: "Invalid job reference or access token." }, { status: 403 });
         }
 
         // ── 3. State guard ──
         if (job.status !== JobState.FREE_SUMMARY_COMPLETE && job.status !== JobState.AWAITING_PAYMENT) {
-            return NextResponse.json(
-                { error: `Cannot checkout — job is in '${job.status}' state.` },
-                { status: 409 },
-            );
+            return NextResponse.json({ error: `Cannot checkout — job is in '${job.status}' state.` }, { status: 409 });
         }
 
         // ── 4. Build line items & calculate total server-side ──
@@ -101,6 +87,7 @@ export async function POST(req: Request) {
         }
 
         // ── 5. Create Stripe Checkout Session ──
+        // ── 5. Create Stripe Checkout Session ──
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
         const session = await stripe.checkout.sessions.create({
             mode: "payment",
@@ -109,19 +96,25 @@ export async function POST(req: Request) {
             cancel_url: cancelUrl ?? `${appUrl}/`,
             automatic_tax: { enabled: false },
             payment_method_types: ["card"],
+
+            // Session Metadata
             metadata: {
                 jobId: String(jobId),
-                accessToken,
+                accessToken: String(accessToken),
                 upsells: JSON.stringify(upsells),
+                fromCheckoutSession: "true",
             },
+
+            // 🚨 CRITICAL: This must match the webhook requirements exactly!
             payment_intent_data: {
                 metadata: {
                     jobId: String(jobId),
-                    disclaimerAcknowledged: "true",
+                    accessToken: String(accessToken), // <-- Added this
+                    upsells: JSON.stringify(upsells), // <-- Added this
+                    fromCheckoutSession: "true", // <-- Added this to prevent duplicate processing
                 },
             },
         });
-
         // ── 6. Upsert a PENDING JobPayment record ──
         // The webhook will update this to "completed" once payment is confirmed.
         // Using upsert so re-visiting checkout doesn't create duplicate records.
@@ -158,9 +151,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ url: session.url });
     } catch (error: any) {
         console.error("[checkout]", error);
-        return NextResponse.json(
-            { error: error.message || "Failed to create checkout session." },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: error.message || "Failed to create checkout session." }, { status: 500 });
     }
 }
