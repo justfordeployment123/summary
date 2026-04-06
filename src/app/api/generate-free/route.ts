@@ -143,6 +143,7 @@ URGENCY RULES (for the "urgency" field):
 SUMMARY RULES (for the "summary" field):
 - 100–130 words, plain English, Proper Markdown formatting.
 - No professional advice. Be specific about what the letter says.
+- RETURN THE SUMMARY IN ENGLISH, regardless of the input language.
 
 OUTPUT: Return ONLY the JSON object. No preamble, no explanation, no markdown fences.`;
 }

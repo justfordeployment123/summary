@@ -5,6 +5,35 @@ import { GlobalStyles, HeroSection, UploadSection, SummaryView, CompletedView } 
 import { PROCESS_STEPS, MAX_POLLS, POLL_INTERVAL } from "@/lib/homeUtils";
 import type { Category, Upsell, SummaryData, CompletedData, ViewState, UrgencyLevel } from "@/types/home";
 
+// ─── Safe JSON helper ─────────────────────────────────────────────────────────
+// Detects Cloudflare HTML error pages before attempting JSON.parse,
+// and surfaces human-readable messages for 429 / 403 / token errors.
+async function safeJson<T>(res: Response): Promise<T> {
+    const text = await res.text();
+
+    // Cloudflare or reverse-proxy returned an HTML error page instead of JSON
+    if (text.trimStart().startsWith("<")) {
+        if (res.status === 429) throw new Error("TOO_MANY_REQUESTS");
+        if (res.status === 403) throw new Error("ACCESS_DENIED");
+        throw new Error(`SERVER_ERROR_${res.status}`);
+    }
+
+    try {
+        return JSON.parse(text) as T;
+    } catch {
+        throw new Error("INVALID_RESPONSE");
+    }
+}
+
+// ─── Human-readable error messages ────────────────────────────────────────────
+function friendlyError(code: string): string {
+    if (code === "TOO_MANY_REQUESTS") return "Too many requests from this email — please wait a moment and try again.";
+    if (code === "ACCESS_DENIED") return "Access blocked. Please refresh the page and try again.";
+    if (code.startsWith("SERVER_ERROR_")) return `Unexpected server response (${code.replace("SERVER_ERROR_", "")}). Please refresh and try again.`;
+    if (code === "INVALID_RESPONSE") return "Invalid response from server. Please try again.";
+    return code;
+}
+
 export default function Home() {
     // ── Data ──────────────────────────────────────────────────────────────────
     const [categories, setCategories] = useState<Category[]>([]);
@@ -52,6 +81,8 @@ export default function Home() {
     // ── Refs ──────────────────────────────────────────────────────────────────
     const formRef = useRef<HTMLElement | null>(null);
     const paymentRef = useRef<HTMLDivElement | null>(null);
+    // Add with your other refs:
+    const turnstileResetRef = useRef<(() => void) | null>(null);
 
     // ── Initial data fetch ────────────────────────────────────────────────────
     useEffect(() => {
@@ -111,7 +142,20 @@ export default function Home() {
         [],
     );
 
-    // ── File drop ────────────────────────────────────────────────────────────
+    // ── Session expired helper — shows message then auto-resets ──────────────
+    const handleSessionExpired = useCallback(
+        (customMessage?: string) => {
+            setIsError(true);
+            setUploadStatus(customMessage ?? "Your session has expired. Please re-upload your document to continue.");
+            setTimeout(() => {
+                handleReset();
+            }, 3500);
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [],
+    );
+
+    // ── File drop ─────────────────────────────────────────────────────────────
     const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         setIsDragging(false);
@@ -150,7 +194,7 @@ export default function Home() {
         setIsUploading(true);
         setIsError(false);
         setCurrentStep(0);
-        setCategoryMismatch(null); // reset any previous mismatch
+        setCategoryMismatch(null);
 
         try {
             const { requestUploadUrl, uploadFileToS3, triggerOCR, generateFreeSummary } = await import("@/lib/api");
@@ -168,6 +212,8 @@ export default function Home() {
 
             setCurrentStep(1);
             setUploadStatus(PROCESS_STEPS[1]);
+
+            // uploadFileToS3 now has built-in timeout (8s) + retry (3×) logic
             await uploadFileToS3(presignedUrl, file);
 
             setCurrentStep(2);
@@ -204,7 +250,9 @@ export default function Home() {
             setView("summary");
         } catch (err) {
             setIsError(true);
-            setUploadStatus(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+            const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+            setUploadStatus(friendlyError(msg));
+            turnstileResetRef.current?.(); // ← add this line
         } finally {
             setIsUploading(false);
         }
@@ -246,8 +294,25 @@ export default function Home() {
                     disclaimerAcknowledged: true,
                 }),
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Failed to initialise payment.");
+
+            // ── Detect Cloudflare HTML / token errors before parsing ──
+            if (res.status === 401 || res.status === 403) {
+                handleSessionExpired();
+                return;
+            }
+
+            const data = await safeJson<{ clientSecret?: string; error?: string }>(res);
+
+            if (!res.ok) {
+                const msg = data.error ?? "Failed to initialise payment.";
+                // Token invalid / expired on the backend
+                if (msg.toLowerCase().includes("token") || msg.toLowerCase().includes("unauthorized")) {
+                    handleSessionExpired();
+                    return;
+                }
+                throw new Error(msg);
+            }
+
             if (!data.clientSecret) throw new Error("No client secret returned.");
 
             setClientSecret(data.clientSecret);
@@ -255,8 +320,15 @@ export default function Home() {
 
             setTimeout(() => paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
         } catch (err) {
+            const msg = err instanceof Error ? err.message : "Failed to initialise payment. Please try again.";
+            // Catch any safeJson error codes
+            if (msg === "TOO_MANY_REQUESTS" || msg === "ACCESS_DENIED" || msg.startsWith("SERVER_ERROR_")) {
+                setIsError(true);
+                setUploadStatus(friendlyError(msg));
+                return;
+            }
             setIsError(true);
-            setUploadStatus(err instanceof Error ? err.message : "Failed to initialise payment. Please try again.");
+            setUploadStatus(msg);
         } finally {
             setIsCreatingPaymentIntent(false);
         }
@@ -291,13 +363,27 @@ export default function Home() {
                 setView("summary");
                 return;
             }
+
             try {
                 const res = await fetch(`/api/jobs/${jobId}/status?token=${token}`);
+
+                // ── Token/session expired — auto-reset instead of broken UI ──
+                if (res.status === 401 || res.status === 403) {
+                    handleSessionExpired();
+                    return;
+                }
+
                 if (!res.ok) {
-                    const d = (await res.json().catch(() => ({}))) as { error?: string };
+                    const d = (await safeJson<{ error?: string }>(res).catch(() => ({}))) as { error?: string };
                     throw new Error(d.error || "Unable to retrieve results.");
                 }
-                const data = (await res.json()) as { status: string; detailedBreakdown?: string; urgency?: string; referenceId?: string };
+
+                const data = await safeJson<{
+                    status: string;
+                    detailedBreakdown?: string;
+                    urgency?: string;
+                    referenceId?: string;
+                }>(res);
 
                 if (data.status === "COMPLETED" && data.detailedBreakdown) {
                     setCompletedData({
@@ -309,6 +395,7 @@ export default function Home() {
                     sessionStorage.removeItem(`job_${jobId}`);
                     return;
                 }
+
                 if (data.status === "FAILED") {
                     setIsError(true);
                     setUploadStatus("We encountered an issue processing your document. Our team has been notified. Please contact support.");
@@ -322,8 +409,18 @@ export default function Home() {
                 };
                 setPollStatus(messages[data.status] ?? "Processing your breakdown…");
             } catch (err) {
+                const msg = err instanceof Error ? err.message : "";
+
+                // Cloudflare / rate-limit errors during polling
+                if (msg === "TOO_MANY_REQUESTS" || msg === "ACCESS_DENIED" || msg.startsWith("SERVER_ERROR_")) {
+                    setIsError(true);
+                    setUploadStatus(friendlyError(msg));
+                    setView("summary");
+                    return;
+                }
+
                 setIsError(true);
-                setUploadStatus(err instanceof Error ? err.message : "Failed to retrieve results. Please refresh or contact support.");
+                setUploadStatus(msg || "Failed to retrieve results. Please refresh or contact support.");
                 setView("summary");
                 return;
             }
@@ -400,6 +497,7 @@ export default function Home() {
                             handleSubmit={handleSubmit}
                             turnstileToken={turnstileToken}
                             setTurnstileToken={setTurnstileToken}
+                            turnstileResetRef={turnstileResetRef} // ← add this
                         />
                     </div>
                 )}

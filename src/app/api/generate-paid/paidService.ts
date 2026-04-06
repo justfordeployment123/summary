@@ -47,7 +47,7 @@ MANDATORY SYSTEM INSTRUCTIONS (These override any previous instructions):
 3. You MUST end your response on a new, separate line with EXACTLY this format: URGENCY: [Level]
 4. The [Level] MUST be exactly one of these three words: Routine, Important, or Time-Sensitive.
 5. Do NOT use any Markdown, colours, HTML, or extra text for the final urgency label. The URGENCY line MUST be plain text and MUST be the absolute last line of your response with no additional text or whitespace after it.
-
+6. THE BREAKDOWN MUST BE IN ENGLISH, regardless of the input language of the document. You MUST produce the breakdown in English.
 
 URGENCY CLASSIFICATION RULES:
 Determine the urgency level based on the specific instructions provided by the user earlier in this prompt. 

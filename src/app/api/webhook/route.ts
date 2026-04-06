@@ -33,7 +33,6 @@ export async function POST(req: Request) {
     const rawBody = await req.text();
     const sig = req.headers.get("stripe-signature");
     console.log("[webhook] Received event, verifying signature...");
-    
 
     if (!sig) {
         console.error("[webhook] Missing stripe-signature header");
@@ -50,19 +49,12 @@ export async function POST(req: Request) {
 
     await dbConnect();
 
-    // ── 2. Idempotency check ──
+    // ── 2. Idempotency check (Read-Only) ──
     const existingEvent = await WebhookEvent.findOne({ stripe_event_id: event.id }).lean();
     if (existingEvent) {
         console.log(`[webhook] Duplicate event ${event.id} — skipping.`);
         return NextResponse.json({ received: true, duplicate: true });
     }
-
-    await WebhookEvent.create({
-        stripe_event_id: event.id,
-        event_type: event.type,
-        job_id: null,
-        processed_at: new Date(),
-    });
 
     // ── 3. Route event ──
     try {
@@ -76,9 +68,18 @@ export async function POST(req: Request) {
             default:
                 console.log(`[webhook] Unhandled event type: ${event.type}`);
         }
+
+        // ── 4. Commit Idempotency Record ──
+        // Only mark this as processed if the handlers complete without crashing/terminating.
+        await WebhookEvent.create({
+            stripe_event_id: event.id,
+            event_type: event.type,
+            job_id: null,
+            processed_at: new Date(),
+        });
     } catch (error: any) {
         console.error(`[webhook] Handler error for ${event.type}:`, error.message);
-        // Return 500 so Stripe retries. Idempotency guard above prevents double AI generation.
+        // Return 500 so Stripe retries. Idempotency guard above prevents double processing on the retry.
         return NextResponse.json({ error: "Internal handler error." }, { status: 500 });
     }
 
@@ -115,8 +116,6 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
         });
     }
 
-    await WebhookEvent.findOneAndUpdate({ stripe_event_id: event.id }, { job_id: jobId });
-
     await confirmAndGenerate({
         jobId,
         accessToken,
@@ -144,8 +143,6 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
         console.log(`[webhook] payment_intent.succeeded ${intent.id} — no jobId metadata, skipping.`);
         return;
     }
-
-    await WebhookEvent.findOneAndUpdate({ stripe_event_id: event.id }, { job_id: jobId });
 
     await confirmAndGenerate({
         jobId,
@@ -213,8 +210,6 @@ async function confirmAndGenerate({
     }
 
     // ── 4. Update the pending JobPayment record to "completed" ──
-    // The checkout/create-payment-intent route already created this record.
-    // We update it here with the confirmed payment intent ID and real amount.
     const paymentDoc = await JobPayment.findOneAndUpdate(
         {
             job_id: jobId,
@@ -234,8 +229,6 @@ async function confirmAndGenerate({
     );
 
     if (!paymentDoc) {
-        // Pending record missing — create it now as a fallback.
-        // This handles the rare case where checkout route failed to upsert.
         console.warn(`[webhook] No pending JobPayment for job ${jobId} — creating fallback record.`);
         await JobPayment.create({
             job_id: jobId,
@@ -265,16 +258,18 @@ async function confirmAndGenerate({
         return;
     }
 
-    // ── 6. Trigger paid AI generation ──
-    // generatePaidBreakdown handles its own state transitions:
-    //   PAYMENT_CONFIRMED → PAID_BREAKDOWN_GENERATING → COMPLETED (or FAILED)
-    try {
-        await generatePaidBreakdown(jobId, tempDoc.extracted_text, upsells);
-        await Temp.deleteOne({ job_id: String(jobId) });
-        console.log(`[webhook] Paid generation completed for job ${jobId}`);
-    } catch (error: any) {
-        console.error(`[webhook] Paid generation failed for job ${jobId}:`, error.message);
-        // generatePaidBreakdown already set status to FAILED — just update payment record
-        await JobPayment.findOneAndUpdate({ job_id: jobId, stripe_payment_intent_id: paymentIntentId }, { $set: { status: "failed" } });
-    }
+    // ── 6. Trigger paid AI generation (Fire and Forget) ──
+    // Because this is running on a VPS, we do NOT await this. We let it run in the
+    // background so we can instantly return 200 OK to Stripe and prevent timeouts.
+    console.log(`[webhook] Spawning background AI generation for job ${jobId}`);
+
+    generatePaidBreakdown(jobId, tempDoc.extracted_text, upsells)
+        .then(async () => {
+            await Temp.deleteOne({ job_id: String(jobId) });
+            console.log(`[webhook] Paid generation completed for job ${jobId}`);
+        })
+        .catch(async (error: any) => {
+            console.error(`[webhook] Paid generation failed for job ${jobId}:`, error.message);
+            await JobPayment.findOneAndUpdate({ job_id: jobId, stripe_payment_intent_id: paymentIntentId }, { $set: { status: "failed" } });
+        });
 }

@@ -42,16 +42,41 @@ export async function requestUploadUrl(data: UploadInitPayload): Promise<UploadI
 /**
  * Step 2: Pushes the physical file directly to AWS S3 using the presigned URL.
  */
-export async function uploadFileToS3(presignedUrl: string, file: File): Promise<void> {
-    const res = await fetch(presignedUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-    });
+export async function uploadFileToS3(presignedUrl: string, file: File, timeoutMs = 8000, maxRetries = 3): Promise<void> {
+    let lastError: Error | null = null;
 
-    if (!res.ok) {
-        throw new Error("Failed to upload file to S3");
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const res = await fetch(presignedUrl, {
+                method: "PUT",
+                headers: { "Content-Type": file.type },
+                body: file,
+                signal: controller.signal,
+            });
+            clearTimeout(timer);
+
+            if (!res.ok) throw new Error(`Failed to upload file to S3 (${res.status})`);
+            return;
+        } catch (err) {
+            clearTimeout(timer);
+            lastError = err instanceof Error ? err : new Error("Upload failed");
+
+            const isAbort = lastError.name === "AbortError";
+            console.warn(`uploadFileToS3: attempt ${attempt}/${maxRetries} — ${isAbort ? "timed out" : lastError.message}`);
+
+            if (attempt === maxRetries) break;
+            await new Promise((r) => setTimeout(r, attempt * 1000)); // 1s, 2s back-off
+        }
     }
+
+    throw new Error(
+        lastError?.name === "AbortError"
+            ? "Upload timed out. Please check your connection and try again."
+            : (lastError?.message ?? "Upload failed. Please try again."),
+    );
 }
 
 // ─── OCR ─────────────────────────────────────────────────────────────────────
