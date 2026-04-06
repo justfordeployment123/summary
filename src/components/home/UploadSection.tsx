@@ -41,6 +41,7 @@ export function UploadSection({
 }) {
     const [turnstileError, setTurnstileError] = useState(false);
     const turnstileRef = useRef<TurnstileInstance>(undefined);
+    const turnstileTokenRef = useRef<string | null>(null);
 
     // Expose reset to parent
     useEffect(() => {
@@ -60,7 +61,7 @@ export function UploadSection({
 
     const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!turnstileToken) {
+        if (!turnstileTokenRef.current) {
             setTurnstileError(true);
             return;
         }
@@ -368,14 +369,19 @@ export function UploadSection({
                                         ref={turnstileRef}
                                         siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
                                         onSuccess={(token) => {
+                                            turnstileTokenRef.current = token; // ← set ref immediately
+
                                             setTurnstileToken(token);
                                             setTurnstileError(false);
                                         }}
                                         onExpire={() => {
+                                            turnstileTokenRef.current = null;
+
                                             setTurnstileToken(null);
                                             turnstileRef.current?.reset();
                                         }}
                                         onError={() => {
+                                            turnstileTokenRef.current = null;
                                             setTurnstileToken(null);
                                             setTurnstileError(true);
                                         }}

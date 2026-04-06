@@ -385,14 +385,21 @@ export default function Home() {
                     referenceId?: string;
                 }>(res);
 
-                if (data.status === "COMPLETED" && data.detailedBreakdown) {
-                    setCompletedData({
-                        detailedBreakdown: data.detailedBreakdown,
-                        urgency: (data.urgency ?? "Routine") as UrgencyLevel,
-                        referenceId: data.referenceId ?? "",
-                    });
-                    setView("completed");
-                    sessionStorage.removeItem(`job_${jobId}`);
+                if (data.status === "COMPLETED") {
+                    if (data.detailedBreakdown) {
+                        setCompletedData({
+                            detailedBreakdown: data.detailedBreakdown,
+                            urgency: (data.urgency ?? "Routine") as UrgencyLevel,
+                            referenceId: data.referenceId ?? "",
+                        });
+                        setView("completed");
+                        sessionStorage.removeItem(`job_${jobId}`);
+                    } else {
+                        // COMPLETED on backend but breakdown missing — don't loop, surface error
+                        setIsError(true);
+                        setUploadStatus("Your breakdown is complete but the content failed to load. Please contact support with your reference ID.");
+                        setView("summary");
+                    }
                     return;
                 }
 
