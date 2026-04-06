@@ -250,9 +250,9 @@ export function HeroSection({ onScrollToUpload }: HeroSectionProps) {
                                     letterSpacing: "0.04em",
                                 }}
                             >
-                                Medical
+                                Legal
                             </span>
-                            <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "#1a2b35" }}>NHS Appointment Letter</span>
+                            <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "#1a2b35" }}>County Court Letter</span>
                         </div>
 
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>

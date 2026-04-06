@@ -3,6 +3,7 @@
 import { Spinner, CheckIcon } from "@/components/home/primitives";
 import type { UploadSectionProps } from "@/types/home";
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
+import { fontSize } from "pdfkit";
 import { useRef, useState } from "react";
 
 const ALLOWED_TYPES = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "image/jpeg", "image/png"];
@@ -243,9 +244,9 @@ export function UploadSection({
                                 <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
                                     <input type="checkbox" required disabled={isUploading} />
                                     <span style={{ fontSize: "0.82rem", color: "#64748b", lineHeight: 1.5, paddingTop: 1 }}>
-                                        <span style={{ color: "#0F233F", fontWeight: 700 }}>I confirm I am authorised to upload this document</span>{" "}
+                                        <span style={{ color: "#0F233F", fontWeight: 700 }}><span style={{ color: "#f43f5e", fontWeight: 700 }}>* </span>I confirm I am authorised to upload this document</span>{" "}
                                         and understand that Explain My Letter provides simplified explanations, <strong>NOT</strong> legal, medical,
-                                        financial or professional advice. <span style={{ color: "#f43f5e" }}>*</span>
+                                        financial or professional advice. 
                                     </span>
                                 </label>
 
