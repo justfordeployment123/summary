@@ -236,7 +236,7 @@ export function SummaryView({
                 </div>
 
                 {/* Summary body */}
-                <div style={{ padding: "38px 5px" }}>
+                <div style={{ paddingTop: "38px", paddingLeft: 36, paddingRight: 10}}>
                     <SectionLabel>Plain English Summary</SectionLabel>
                     
                     <div dangerouslySetInnerHTML={{ __html: markdownToHtml(summaryData.summary) }} />

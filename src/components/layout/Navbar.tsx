@@ -27,11 +27,7 @@ export function Navbar() {
 
     const handleUploadClick = () => {
         setMobileMenuOpen(false);
-        if (pathname === "/") {
-            document.getElementById("upload")?.scrollIntoView({ behavior: "smooth" });
-        } else {
-            router.push("/#upload-section");
-        }
+        router.push("/#upload");
     };
 
     return (

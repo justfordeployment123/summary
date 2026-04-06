@@ -898,6 +898,8 @@ const URGENCY_STYLES: Record<string, { color: string; bg: string }> = {
 
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
+// ─── Modal ───────────────────────────────────────────────────────────────────
+
 function BreakdownModal({ example, onClose }: { example: Example; onClose: () => void }) {
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
@@ -915,6 +917,41 @@ function BreakdownModal({ example, onClose }: { example: Example; onClose: () =>
     }, []);
 
     const urgencyStyle = URGENCY_STYLES[example.urgency] || URGENCY_STYLES["Routine"];
+
+    // Split the markdown into sections by h2 headings, then apply blur from section 3 onward
+    const buildGatedHtml = (markdown: string): string => {
+        // Split on h2 headings (## ...) but keep the delimiter
+        const parts = markdown.split(/(?=^## )/m);
+
+        // parts[0] is the intro text (before any heading), parts[1+] are heading sections
+        // We want to blur body text from the 3rd heading onward (index 2+ in heading sections)
+        // i.e. parts[0] = intro, parts[1] = first heading section, parts[2] = second, parts[3+] = blurred
+
+        return parts
+            .map((part, i) => {
+                const isBlurred = i >= 3; // intro + first 2 heading sections stay visible
+
+                if (!isBlurred) {
+                    return markdownToHtml(part);
+                }
+
+                // For blurred sections: render heading fully, blur only the body paragraphs/lists
+                // Split on first newline to separate heading from body
+                const newlineIdx = part.indexOf("\n");
+                const heading = newlineIdx !== -1 ? part.slice(0, newlineIdx) : part;
+                const body = newlineIdx !== -1 ? part.slice(newlineIdx + 1) : "";
+
+                const headingHtml = markdownToHtml(heading);
+                const bodyHtml = body.trim()
+                    ? `<div class="blurred-content" style="filter: blur(4.5px); user-select: none; pointer-events: none; opacity: 0.85;">${markdownToHtml(body)}</div>`
+                    : "";
+
+                return headingHtml + bodyHtml;
+            })
+            .join("");
+    };
+
+    const gatedHtml = buildGatedHtml(example.breakdown);
 
     return (
         <>
@@ -979,6 +1016,45 @@ function BreakdownModal({ example, onClose }: { example: Example; onClose: () =>
                     background: #e2e8f0;
                     color: #0F233F;
                 }
+                .gated-content-wrapper {
+                    position: relative;
+                }
+                .paywall-overlay {
+                    position: sticky;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    margin: 0 0 32px;
+                    padding: 32px 28px 28px;
+                    background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.92) 30%, #ffffff 60%);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 12px;
+                    text-align: center;
+                    z-index: 5;
+                }
+                .paywall-unlock-btn {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 13px 28px;
+                    border-radius: 12px;
+                    background: linear-gradient(135deg, #12A1A6, #54D6D4);
+                    color: #fff;
+                    border: none;
+                    font-weight: 800;
+                    font-size: 0.95rem;
+                    cursor: pointer;
+                    box-shadow: 0 6px 20px rgba(18,161,166,0.3);
+                    transition: transform 0.2s, box-shadow 0.2s;
+                    font-family: inherit;
+                }
+                .paywall-unlock-btn:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 10px 24px rgba(18,161,166,0.4);
+                }
+                .paywall-unlock-btn:active { transform: translateY(0); }
             `}</style>
 
             <div
@@ -1000,7 +1076,7 @@ function BreakdownModal({ example, onClose }: { example: Example; onClose: () =>
                         </button>
                     </div>
 
-                    {/* Header — matches CompletedView style */}
+                    {/* Header */}
                     <div style={{ borderLeft: "8px solid #08121f", margin: "28px 28px 0 28px", paddingLeft: 24 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
                             <span
@@ -1072,8 +1148,34 @@ function BreakdownModal({ example, onClose }: { example: Example; onClose: () =>
                         }}
                     />
 
-                    {/* Markdown content — rendered exactly like CompletedView */}
-                    <div style={{ padding: "0 0 32px" }} dangerouslySetInnerHTML={{ __html: markdownToHtml(example.breakdown) }} />
+                    {/* Gated markdown content */}
+                    <div className="gated-content-wrapper">
+                        <div style={{ padding: "30px" }} dangerouslySetInnerHTML={{ __html: gatedHtml }} />
+
+                        {/* Paywall overlay — sticky to bottom of scroll */}
+                        <div className="paywall-overlay">
+                            <p style={{ margin: 0, fontSize: "0.9rem", color: "#64748b", fontWeight: 600, maxWidth: 340 }}>
+                                The full breakdown continues — unlock to read every section.
+                            </p>
+                            <button
+                                className="paywall-unlock-btn"
+                                onClick={() => {
+                                    onClose();
+                                    // Route to your pricing/signup page
+                                    window.location.href = "/pricing";
+                                }}
+                            >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                                Unlock Full Breakdown
+                            </button>
+                            <p style={{ margin: 0, fontSize: "0.75rem", color: "#94a3b8", fontWeight: 500 }}>
+                                One-time upload · No subscription needed
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </>
