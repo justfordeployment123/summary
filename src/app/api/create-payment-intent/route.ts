@@ -22,7 +22,8 @@ export async function POST(req: Request) {
 
         const body: CreatePaymentIntentBody = await req.json();
         const { jobId, accessToken, upsells = [], disclaimerAcknowledged } = body;
-
+        // console.log()
+        console.log("Create payment intent request received", { jobId, upsells, disclaimerAcknowledged });
         // ── 1. Validate disclaimer server-side (§13.2) ──
         if (!disclaimerAcknowledged) {
             return NextResponse.json({ error: "You must acknowledge the disclaimer before proceeding." }, { status: 400 });
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
                 }
             }
         }
+        console.log(`Calculated total amount: £${(totalAmount / 100).toFixed(2)} for job ${jobId} with upsells:`, purchasedUpsellIds);
 
         // ── 6. Create Stripe PaymentIntent ──
         const paymentIntent = await stripe.paymentIntents.create({
@@ -124,6 +126,7 @@ export async function POST(req: Request) {
             stripe_payment_intent_id: paymentIntent.id,
             upsells_purchased: purchasedUpsellIds,
         });
+        console.log(`Job ${jobId} updated to AWAITING_PAYMENT with PaymentIntent ${paymentIntent.client_secret}`);
 
         return NextResponse.json({ clientSecret: paymentIntent.client_secret });
     } catch (error: any) {

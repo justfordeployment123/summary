@@ -187,43 +187,6 @@ export async function createPaymentIntent(data: CreatePaymentIntentPayload): Pro
     return res.json();
 }
 
-// ─── Payment: Hosted Checkout flow (legacy / fallback) ───────────────────────
-
-export interface CheckoutPayload {
-    jobId: string;
-    accessToken: string;
-    upsells: string[];
-    disclaimerAcknowledged: boolean;
-    successUrl: string;
-    cancelUrl: string;
-}
-
-export interface CheckoutResponse {
-    url: string;
-}
-
-/**
- * Step 5b (hosted Checkout flow — legacy): Creates a Stripe Checkout Session
- * and returns the hosted page URL to redirect the user to.
- *
- * Keep this for fallback / server-side rendering contexts where the embedded
- * Elements form cannot be used (e.g. no-JS environments, future admin flows).
- * The primary flow uses createPaymentIntent + <Elements> instead.
- */
-export async function createCheckoutSession(data: CheckoutPayload): Promise<CheckoutResponse> {
-    const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-    });
-
-    if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to initialize checkout.");
-    }
-
-    return res.json();
-}
 
 // ─── Job Status (polling) ─────────────────────────────────────────────────────
 

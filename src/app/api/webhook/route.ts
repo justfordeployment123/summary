@@ -9,99 +9,103 @@ import WebhookEvent from "@/models/WebhookEvent";
 import { JobPayment } from "@/models/JobPayment";
 import Temp from "@/models/Temp";
 import { generatePaidBreakdown } from "@/app/api/generate-paid/paidService";
+import { confirmAndGenerate } from "@/lib/paymentService";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
+// ─── Entry point ──────────────────────────────────────────────────────────────
+
 export async function POST(req: Request) {
     const rawBody = await req.text();
     const sig = req.headers.get("stripe-signature");
+    console.log("[webhook] Received event with headers:", {
+        "stripe-signature": sig,
+    });
 
     if (!sig) {
-        console.error("🚨 [webhook] Missing stripe-signature header");
-        return NextResponse.json({ error: "Missing signature." }, { status: 400 });
+        return NextResponse.json({ error: "Missing stripe-signature header." }, { status: 400 });
     }
 
     let event: Stripe.Event;
     try {
         event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
     } catch (err: any) {
-        console.error("🚨 [webhook] Invalid signature:", err.message);
-        return NextResponse.json({ error: `Signature verification failed: ${err.message}` }, { status: 400 });
+        console.error("[webhook] Signature verification failed:", err.message);
+        return NextResponse.json({ error: `Invalid signature: ${err.message}` }, { status: 400 });
     }
 
     await dbConnect();
-
-    // ── 1. Idempotency check ──
-    const existingEvent = await WebhookEvent.findOne({ stripe_event_id: event.id }).lean();
-    if (existingEvent) {
-        console.log(`🟢 [webhook] Duplicate event ${event.id} — skipping (Idempotent success).`);
+    console.log(`[webhook] Processing event ${event.type} (${event.id}) `);
+    // Idempotency — if we've seen this event before, return early
+    const alreadyProcessed = await WebhookEvent.findOne({ stripe_event_id: event.id }).lean();
+    if (alreadyProcessed) {
         return NextResponse.json({ received: true, duplicate: true });
     }
 
-    try {
-        // ── Extract JobId early for the Idempotency Record ──
-        const stripeObj = event.data.object as any;
-        const { jobId: extractedJobId } = extractMetadata(stripeObj?.metadata || null);
+    const stripeObj = event.data.object as any;
+    const meta = extractMetadata(stripeObj?.metadata ?? null);
 
-        // ── 2. Route event ──
+    try {
         switch (event.type) {
             case "checkout.session.completed":
                 await handleCheckoutCompleted(event);
                 break;
             case "payment_intent.succeeded":
+
                 await handlePaymentIntentSucceeded(event);
                 break;
             default:
-                console.log(`🟡 [webhook] Unhandled event type: ${event.type}`);
+                // Unrecognised events are not an error — just acknowledge them
+                break;
         }
 
-        // ── 3. Commit Idempotency Record (Only if handlers succeeded) ──
         await WebhookEvent.create({
             stripe_event_id: event.id,
             event_type: event.type,
-            job_id: extractedJobId, // 🚨 Now properly passing the extracted jobId!
+            job_id: meta.jobId,
             processed_at: new Date(),
         });
 
         return NextResponse.json({ received: true });
-    } catch (error: any) {
-        console.error(`🚨 [webhook] Handler error for ${event.type}:`, error.message);
-        const status = error.message.includes("Validation") || error.message.includes("Data") ? 400 : 500;
-        return NextResponse.json({ error: error.message }, { status });
+    } catch (err: any) {
+        console.error(`[webhook] Handler failed for ${event.type} (${event.id}):`, err.message);
+
+        // 4xx → don't retry (bad data). 5xx → Stripe will retry.
+        const status = err.message.startsWith("Validation:") ? 400 : 500;
+        return NextResponse.json({ error: err.message }, { status });
     }
 }
 
-// ─── Metadata extraction ──────────────────────────────────────────────────────
+// ─── Metadata ─────────────────────────────────────────────────────────────────
 
 function extractMetadata(metadata: Stripe.Metadata | null) {
-    if (!metadata) return { jobId: null, accessToken: null, upsells: [] as string[], fromCheckoutSession: false };
     return {
-        jobId: metadata.jobId ?? null,
-        accessToken: metadata.accessToken ?? null,
-        upsells: metadata.upsells ? JSON.parse(metadata.upsells) : [],
-        fromCheckoutSession: metadata.fromCheckoutSession === "true",
+        jobId:             metadata?.jobId       ?? null,
+        accessToken:       metadata?.accessToken ?? null,
+        upsells:           metadata?.upsells ? (JSON.parse(metadata.upsells) as string[]) : [] as string[],
+        fromCheckoutSession: metadata?.fromCheckoutSession === "true",
     };
 }
 
-// ─── Handlers ─────────────────────────────────────────────────────────────────
+// ─── Event handlers ───────────────────────────────────────────────────────────
 
 async function handleCheckoutCompleted(event: Stripe.Event) {
     const session = event.data.object as Stripe.Checkout.Session;
     const { jobId, accessToken, upsells } = extractMetadata(session.metadata);
 
     if (!jobId || !accessToken) {
-        throw new Error("Validation Error: Missing jobId or accessToken in checkout session metadata.");
+        throw new Error("Validation: Missing jobId or accessToken in checkout session metadata.");
     }
 
     await confirmAndGenerate({
         jobId,
         accessToken,
         upsells,
-        stripeSessionId: session.id,
-        paymentIntentId: String(session.payment_intent ?? ""),
-        amountTotal: session.amount_total ?? 0,
-        currency: session.currency ?? "gbp",
+        stripeSessionId:   session.id,
+        paymentIntentId:   String(session.payment_intent ?? ""),
+        amountTotal:       session.amount_total ?? 0,
+        currency:          session.currency ?? "gbp",
     });
 }
 
@@ -109,100 +113,107 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
     const intent = event.data.object as Stripe.PaymentIntent;
     const { jobId, accessToken, upsells, fromCheckoutSession } = extractMetadata(intent.metadata);
 
-    if (fromCheckoutSession) {
-        // This is safe because your checkout route now explicitly passes this down.
-        console.log(`🔵 [webhook] payment_intent.succeeded ${intent.id} — Handled by Checkout Session, skipping.`);
-        return;
-    }
+    // Payment intents created by a Checkout Session are handled by
+    // checkout.session.completed — processing them here would duplicate work.
+    if (fromCheckoutSession) return;
 
     if (!jobId || !accessToken) {
-        throw new Error(`Validation Error: Missing jobId or accessToken in payment intent metadata (${intent.id}).`);
+        throw new Error(`Validation: Missing jobId or accessToken in payment_intent metadata (${intent.id}).`);
     }
 
     await confirmAndGenerate({
         jobId,
         accessToken,
         upsells,
-        stripeSessionId: "",
-        paymentIntentId: intent.id,
-        amountTotal: intent.amount ?? 0,
-        currency: intent.currency ?? "gbp",
+        stripeSessionId:  "",
+        paymentIntentId:  intent.id,
+        amountTotal:      intent.amount ?? 0,
+        currency:         intent.currency ?? "gbp",
     });
 }
 
-// ─── Core Logic ───────────────────────────────────────────────────────────────
+// ─── Core logic ───────────────────────────────────────────────────────────────
 
-async function confirmAndGenerate({ jobId, accessToken, upsells, stripeSessionId, paymentIntentId, amountTotal, currency }: any) {
-    // 1. Verify Job & Token
-    const job = await Job.findOne({ _id: jobId, access_token: accessToken }).lean<any>();
-    if (!job) {
-        throw new Error(`Validation Error: Job ${jobId} not found or token mismatch.`);
-    }
 
-    // 2. State Lock
-    if (job.status === JobState.PAYMENT_CONFIRMED || job.status === JobState.PAID_BREAKDOWN_GENERATING || job.status === JobState.COMPLETED) {
-        console.log(`🟢 [webhook] Job ${jobId} is already processing or completed. Idempotent success.`);
-        return;
-    }
 
-    if (job.status !== JobState.AWAITING_PAYMENT) {
-        throw new Error(`State Error: Job ${jobId} is in state '${job.status}', expected AWAITING_PAYMENT.`);
-    }
+// async function confirmAndGenerate(args: ConfirmArgs) {
+//     const { jobId, accessToken, upsells, stripeSessionId, paymentIntentId, amountTotal, currency } = args;
 
-    // 3. Atomic State Update
-    const updated = await Job.findOneAndUpdate(
-        { _id: jobId, status: JobState.AWAITING_PAYMENT },
-        {
-            $set: {
-                status: JobState.PAYMENT_CONFIRMED,
-                previous_state: JobState.AWAITING_PAYMENT,
-                state_transitioned_at: new Date(),
-                stripe_payment_intent_id: paymentIntentId,
-                upsells_purchased: upsells,
-            },
-        },
-        { new: true },
-    );
+//     // 1. Verify the job exists and the token matches
+//     const job = await Job.findOne({ _id: jobId, access_token: accessToken }).lean<any>();
+//     if (!job) {
+//         throw new Error(`Validation: Job ${jobId} not found or token mismatch.`);
+//     }
 
-    if (!updated) {
-        throw new Error(`State Error: Race condition detected. Job ${jobId} state changed during processing.`);
-    }
+//     // 2. If already past AWAITING_PAYMENT, this is a duplicate call — safe to ignore
+//     const terminalStates = [JobState.PAYMENT_CONFIRMED, JobState.PAID_BREAKDOWN_GENERATING, JobState.COMPLETED];
+//     if (terminalStates.includes(job.status)) {
+//         console.log(`[webhook] Job ${jobId} already at ${job.status} — skipping.`);
+//         return;
+//     }
 
-    // 4. Upsert JobPayment
-    await JobPayment.findOneAndUpdate(
-        { job_id: jobId },
-        {
-            $set: {
-                stripe_payment_intent_id: paymentIntentId,
-                stripe_session_id: stripeSessionId || job.stripe_session_id || "",
-                amount: amountTotal,
-                currency: currency.toLowerCase(),
-                status: "completed",
-                upsells_purchased: upsells,
-            },
-            $setOnInsert: { created_at: new Date() },
-        },
-        { new: true, upsert: true },
-    );
+//     if (job.status !== JobState.AWAITING_PAYMENT) {
+//         throw new Error(`Validation: Job ${jobId} is in unexpected state '${job.status}'.`);
+//     }
 
-    // 5. Get Extracted Text
-    const tempDoc = await Temp.findOne({ job_id: String(jobId) }).lean<any>();
-    if (!tempDoc?.extracted_text) {
-        await Job.findByIdAndUpdate(jobId, { status: JobState.FAILED });
-        await JobPayment.findOneAndUpdate({ job_id: jobId, stripe_payment_intent_id: paymentIntentId }, { $set: { status: "failed" } });
-        throw new Error(`Data Error: No extracted text found in Temp for job ${jobId}. Marked as FAILED.`);
-    }
+//     // 3. Atomic transition — only one concurrent webhook wins this update
+//     const updated = await Job.findOneAndUpdate(
+//         { _id: jobId, status: JobState.AWAITING_PAYMENT },
+//         {
+//             $set: {
+//                 status:                   JobState.PAYMENT_CONFIRMED,
+//                 previous_state:           JobState.AWAITING_PAYMENT,
+//                 state_transitioned_at:    new Date(),
+//                 stripe_payment_intent_id: paymentIntentId,
+//                 upsells_purchased:        upsells,
+//             },
+//         },
+//         { new: true },
+//     );
 
-    // 6. Fire and Forget AI Task
-    console.log(`🚀 [webhook] Spawning background AI generation for job ${jobId}`);
-    generatePaidBreakdown(jobId, tempDoc.extracted_text, upsells)
-        .then(async () => {
-            // Clean up temp storage once processing finishes successfully
-            await Temp.deleteOne({ job_id: String(jobId) });
-            console.log(`✅ [webhook] Paid generation completed for job ${jobId}`);
-        })
-        .catch(async (error: any) => {
-            console.error(`🚨 [webhook] AI generation failed for job ${jobId}:`, error.message);
-            await JobPayment.findOneAndUpdate({ job_id: jobId, stripe_payment_intent_id: paymentIntentId }, { $set: { status: "failed" } });
-        });
-}
+//     if (!updated) {
+//         // Another webhook beat us to it — not an error, just stop
+//         console.log(`[webhook] Job ${jobId} was claimed by a concurrent event — skipping.`);
+//         return;
+//     }
+
+//     // 4. Record payment
+//     await JobPayment.findOneAndUpdate(
+//         { job_id: jobId },
+//         {
+//             $set: {
+//                 stripe_payment_intent_id: paymentIntentId,
+//                 stripe_session_id:        stripeSessionId || job.stripe_session_id || "",
+//                 amount:                   amountTotal,
+//                 currency:                 currency.toLowerCase(),
+//                 status:                   "completed",
+//                 upsells_purchased:        upsells,
+//             },
+//             $setOnInsert: { created_at: new Date() },
+//         },
+//         { upsert: true },
+//     );
+
+//     // 5. Fetch extracted text (written during OCR step)
+//     const tempDoc = await Temp.findOne({ job_id: String(jobId) }).lean<any>();
+//     if (!tempDoc?.extracted_text) {
+//         await Promise.all([
+//             Job.findByIdAndUpdate(jobId, { status: JobState.FAILED }),
+//             JobPayment.findOneAndUpdate({ job_id: jobId }, { $set: { status: "failed" } }),
+//         ]);
+//         throw new Error(`Validation: No extracted text in Temp for job ${jobId}. Marked as FAILED.`);
+//     }
+
+//     // 6. Kick off AI generation in the background — webhook returns 200 immediately
+//     generatePaidBreakdown(jobId, tempDoc.extracted_text, upsells)
+//         .then(async () => {
+//             await Temp.deleteOne({ job_id: String(jobId) });
+//         })
+//         .catch(async (err: any) => {
+//             console.error(`[webhook] AI generation failed for job ${jobId}:`, err.message);
+//             await Promise.all([
+//                 Job.findByIdAndUpdate(jobId, { status: JobState.FAILED }),
+//                 JobPayment.findOneAndUpdate({ job_id: jobId }, { $set: { status: "failed" } }),
+//             ]);
+//         });
+// }

@@ -334,12 +334,42 @@ export default function Home() {
         }
     };
 
-    const handlePaymentSuccess = () => {
+    const handlePaymentSuccess = async (paymentIntentId: string) => {
         if (!summaryData) return;
-        setView("processing_payment");
-        startPolling(summaryData.jobId, summaryData.accessToken);
-    };
 
+        setIsPaymentProcessing(true);
+        setIsError(false);
+        setUploadStatus("");
+
+        try {
+            const res = await fetch("/api/verify-payment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    jobId: summaryData.jobId,
+                    accessToken: summaryData.accessToken,
+                    paymentIntentId,
+                }),
+            });
+
+            const data = await safeJson<{ verified: boolean; alreadyProcessing?: boolean; error?: string }>(res);
+
+            if (!res.ok || !data.verified) {
+                setIsError(true);
+                setUploadStatus("Payment received but processing failed. Please contact support with your reference ID.");
+                setIsPaymentProcessing(false);
+                return;
+            }
+
+            // Payment confirmed — now poll for job completion
+            setView("processing_payment");
+            startPolling(summaryData.jobId, summaryData.accessToken);
+        } catch (err) {
+            setIsError(true);
+            setUploadStatus("Could not confirm payment. Please refresh or contact support.");
+            setIsPaymentProcessing(false);
+        }
+    };
     const handlePaymentError = (msg: string) => {
         setIsError(true);
         setUploadStatus(msg);

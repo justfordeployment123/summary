@@ -13,7 +13,6 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
 
         setIsProcessing(true);
 
-        // ✅ Fix 1: Submit elements first (required on mobile for field validation)
         const { error: submitError } = await elements.submit();
         if (submitError) {
             onError(submitError.message || "Please check your payment details.");
@@ -21,7 +20,7 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
             return;
         }
 
-        const { error } = await stripe.confirmPayment({
+        const { error, paymentIntent } = await stripe.confirmPayment({
             elements,
             confirmParams: { return_url: window.location.href },
             redirect: "if_required",
@@ -30,11 +29,13 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
         if (error) {
             onError(error.message || "Payment failed. Please try again.");
             setIsProcessing(false);
-        } else {
-            // ✅ Fix 2: Reset processing state before calling onSuccess
-            // in case the component stays mounted
+        } else if (paymentIntent?.id) {
             setIsProcessing(false);
-            onSuccess();
+            onSuccess(paymentIntent.id); // ← pass the ID up
+        } else {
+            // Shouldn't happen with redirect: "if_required", but just in case
+            onError("Payment status unknown. Please contact support.");
+            setIsProcessing(false);
         }
     };
 

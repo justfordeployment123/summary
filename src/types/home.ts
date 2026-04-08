@@ -113,7 +113,7 @@ export interface UploadSectionProps {
 export interface EmbeddedPaymentFormProps {
     clientSecret: string;
     totalPrice: number;
-    onSuccess: () => void;
+    onSuccess: (paymentIntentId: string) => void;
     onError: (msg: string) => void;
     isProcessing: boolean;
     setIsProcessing: (v: boolean) => void;
@@ -141,7 +141,7 @@ export interface SummaryViewProps {
     isPaymentProcessing: boolean;
     setIsPaymentProcessing: (v: boolean) => void;
     handleProceedToPayment: () => void;
-    handlePaymentSuccess: () => void;
+    handlePaymentSuccess: (paymentIntentId: string) => void;
     handlePaymentError: (msg: string) => void;
     onHidePaymentForm: () => void;
     // Status

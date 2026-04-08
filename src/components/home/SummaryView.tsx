@@ -93,7 +93,6 @@ export function SummaryView({
                 // console.log("Fetched disclaimer checkbox label:", data.disclaimer_checkbox_label);
                 setDisclaimerText(data.disclaimer_text);
                 setCheckboxLabel(data.disclaimer_checkbox_label);
-
             } catch {
                 console.error("Failed to fetch disclaimer text");
             }
@@ -236,9 +235,9 @@ export function SummaryView({
                 </div>
 
                 {/* Summary body */}
-                <div style={{ paddingTop: "38px", paddingLeft: 36, paddingRight: 10}}>
+                <div style={{ paddingTop: "38px", paddingLeft: 36, paddingRight: 10 }}>
                     <SectionLabel>Plain English Summary</SectionLabel>
-                    
+
                     <div dangerouslySetInnerHTML={{ __html: markdownToHtml(summaryData.summary) }} />
                     <div style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
                         <FeedbackButton onClick={() => setFeedbackOpen(true)} label="Rate this summary" />
@@ -545,7 +544,8 @@ export function SummaryView({
                             </div>
                             <span style={{ fontSize: "0.86rem", color: "#475569", lineHeight: 1.65, fontWeight: 500 }}>
                                 {/* I understand this is an Automated Technology-generated summary and not professional advice. I accept the{" "} */}
-                                {checkboxLabel || "I understand this is an Automated Technology-generated summary and not professional advice. I accept the"}
+                                {checkboxLabel ||
+                                    "I understand this is an Automated Technology-generated summary and not professional advice. I accept the"}
                                 <span style={{ color: "#12A1A6", fontWeight: 700 }}>Terms of Service</span>.
                             </span>
                         </label>
