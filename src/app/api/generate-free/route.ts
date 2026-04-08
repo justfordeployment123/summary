@@ -68,40 +68,43 @@ async function sleep(ms: number) {
 // ─── Parse JSON from AI response safely ──────────────────────────────────────
 
 interface AIJsonResponse {
-    categoryCorrect: boolean;
-    suggestedCategory: string | null;
+    topCategories: { name: string; confidence: number }[];
     summary: string;
     urgency: "Routine" | "Important" | "Time-Sensitive";
 }
 
 function parseAIJson(raw: string): AIJsonResponse | null {
     try {
-        // Strip markdown code fences if present
-        const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+        const cleaned = raw
+            .replace(/^```(?:json)?\s*/i, "")
+            .replace(/\s*```$/, "")
+            .trim();
         const parsed = JSON.parse(cleaned);
 
-        // Validate required fields
-        if (typeof parsed.categoryCorrect !== "boolean") return null;
+        if (!Array.isArray(parsed.topCategories) || parsed.topCategories.length === 0) return null;
+
+        // Normalise each entry
+        parsed.topCategories = parsed.topCategories
+            .slice(0, 3)
+            .map((c: any) => ({
+                name: typeof c.name === "string" ? c.name : "",
+                confidence: typeof c.confidence === "number" ? Math.round(c.confidence) : 0,
+            }))
+            .filter((c: any) => c.name);
+
         if (!["Routine", "Important", "Time-Sensitive"].includes(parsed.urgency)) {
             parsed.urgency = "Routine";
         }
         if (typeof parsed.summary !== "string") parsed.summary = "";
-        if (typeof parsed.suggestedCategory !== "string") parsed.suggestedCategory = null;
 
         return parsed as AIJsonResponse;
     } catch {
         return null;
     }
 }
-
 // ─── Build the JSON-output prompt ─────────────────────────────────────────────
 
-function buildJsonPrompt(
-    categoryName: string,
-    allCategories: string[],
-    documentText: string,
-    dbPromptText?: string | null,
-): string {
+function buildJsonPrompt(categoryName: string, allCategories: string[], documentText: string, dbPromptText?: string | null): string {
     const categoryList = allCategories.map((c) => `- ${c}`).join("\n");
 
     const summaryInstructions = dbPromptText
@@ -119,21 +122,35 @@ SELECTED CATEGORY: "${categoryName}"
 ---
 CRITICAL OUTPUT INSTRUCTIONS — YOU MUST RESPOND WITH ONLY VALID JSON, NO OTHER TEXT:
 
-First, determine if the document genuinely belongs to the selected category "${categoryName}".
-Then produce your response as a single JSON object with EXACTLY these four fields:
+Rank the top 1–3 categories this document could belong to, with a confidence percentage for each.
+Then produce your response as a single JSON object with EXACTLY these three fields:
 
 {
-  "categoryCorrect": true or false,
-  "suggestedCategory": "The most appropriate category name from the list above, or null if the selected category is correct",
-  "summary": "Your 100–130 word plain English summary using Proper Markdown (bold, bullets). Write this even if the category is wrong — it helps the user understand the document.",
+  "topCategories": [
+    { "name": "Best matching category name from the list above", "confidence": 85 },
+    { "name": "Second best match", "confidence": 10 },
+    { "name": "Third best match", "confidence": 5 }
+  ],
+  "summary": "Your 100–130 word plain English summary using Proper Markdown (bold, bullets).",
   "urgency": "Routine" or "Important" or "Time-Sensitive"
 }
 
-CATEGORY VALIDATION RULES:
-- Set "categoryCorrect" to true ONLY if the document clearly and primarily belongs to "${categoryName}".
-- If the document belongs to a different category, set "categoryCorrect" to false and set "suggestedCategory" to the best matching category name from the AVAILABLE CATEGORIES list above.
-- If no category fits well, set "categoryCorrect" to false and "suggestedCategory" to null.
-- Be strict: a tax letter is NOT a legal letter, a medical letter is NOT an insurance letter, etc.
+CATEGORY RANKING RULES:
+Step 1 — Identify the PRIMARY PURPOSE: What is the single main reason this document was created?
+  Write this as a one-sentence answer internally before ranking (do not include it in the JSON output).
+
+Step 2 — Match to categories using PRIMARY PURPOSE only:
+  - Pick the category whose name best matches the primary purpose, not surface keywords.
+  - Example: A document instructing a student to complete and submit coursework → primary purpose is academic instruction → top category is whichever category covers education/academic topics.
+  - Example: A document from an employer about salary, role, or conduct → primary purpose is employment → top category is whichever category covers work/employment.
+
+Step 3 — Assign confidence:
+  - The #1 category must have confidence ≥ 60.
+  - Only add a 2nd entry if it genuinely competes with ≥ 20% confidence. Do not pad.
+  - Only add a 3rd entry if it genuinely competes with ≥ 15% confidence. Do not pad.
+  - Confidence values must sum to 100.
+  - Include at least 1 entry, at most 3.
+  
 
 URGENCY RULES (for the "urgency" field):
 - "Time-Sensitive": any specific deadline, due date, or court date mentioned.
@@ -205,6 +222,7 @@ export async function POST(req: Request) {
 
         // ── 1. Validate job ──
         const job = await Job.findById(jobId).populate("category_id").lean<any>();
+        console.log(job);
         if (!job) {
             return NextResponse.json({ error: "Job not found." }, { status: 404 });
         }
@@ -264,9 +282,22 @@ export async function POST(req: Request) {
                 const completion = await openai.chat.completions.create({
                     model,
                     max_tokens: maxOutputTokens,
-                    messages: [{ role: "user", content: prompt }],
-                    temperature: 0.3,
-                    // Ask for JSON if the model supports it
+                    messages: [
+                        {
+                            role: "system",
+                            content: `You are a strict document classifier and summariser. 
+Your classification decisions must be DETERMINISTIC and CONSISTENT — given the same document you must always return the same top category.
+Classification rules:
+- Base your category decision ONLY on the PRIMARY PURPOSE of the document.
+- A document's primary purpose is what the sender intended the recipient to DO or KNOW.
+- Ignore surface-level keywords. An assignment brief mentioning "work" is about education, not employment.
+- Never let summary content influence your category ranking. Classify first, summarise second.
+- When two categories seem close, ask: "What would this person file this under?" — use that.`,
+                        },
+                        { role: "user", content: prompt },
+                    ],
+                    temperature: 0.0,
+                    seed: 42,
                     response_format: model.startsWith("gpt-4") ? { type: "json_object" } : undefined,
                 });
 
@@ -281,7 +312,7 @@ export async function POST(req: Request) {
                 }
 
                 // If category is correct, validate summary length
-                if (parsedResponse.categoryCorrect && !validateAIOutput(parsedResponse.summary)) {
+                if (!validateAIOutput(parsedResponse.summary)) {
                     throw new Error(`AI summary failed validation on attempt ${attempt + 1}. Word count: ${countWords(parsedResponse.summary)}`);
                 }
 
@@ -341,11 +372,22 @@ export async function POST(req: Request) {
             free_summary: parsedResponse.summary,
         });
 
+        // AFTER
+        // AFTER
+        const topCategoryNames = parsedResponse.topCategories.map((c) => c.name);
+        const categoryCorrect = (() => {
+            const matchIndex = topCategoryNames.indexOf(categoryName.trim());
+            if (matchIndex === -1) return false; // not in top 3 at all → block
+            if (matchIndex === 0) return true; // top pick → always allow
+            const confidence = parsedResponse.topCategories[matchIndex].confidence;
+            return confidence >= 35; // 2nd/3rd pick → allow only if ≥35%
+        })();
+
         return NextResponse.json({
             summary: parsedResponse.summary,
             urgency: parsedResponse.urgency,
-            categoryCorrect: parsedResponse.categoryCorrect,
-            suggestedCategory: parsedResponse.suggestedCategory ?? null,
+            categoryCorrect,
+            topCategories: parsedResponse.topCategories,
         });
     } catch (error: any) {
         console.error("[generate-free]", error);

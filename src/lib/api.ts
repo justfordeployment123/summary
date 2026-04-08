@@ -123,6 +123,7 @@ export interface GenerateFreeResponse {
     urgency: string;
     categoryCorrect: boolean;
     suggestedCategory: string;
+    topCategories?: { name: string; confidence: number }[];
 }
 
 /**
@@ -186,7 +187,6 @@ export async function createPaymentIntent(data: CreatePaymentIntentPayload): Pro
 
     return res.json();
 }
-
 
 // ─── Job Status (polling) ─────────────────────────────────────────────────────
 

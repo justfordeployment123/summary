@@ -58,8 +58,9 @@ export default function Home() {
     const [isError, setIsError] = useState(false);
 
     // ── Category mismatch state ───────────────────────────────────────────────
+    // AFTER
     const [categoryMismatch, setCategoryMismatch] = useState<{
-        suggestedCategory: string | null;
+        topCategories: { name: string; confidence: number }[];
     } | null>(null);
 
     // ── View / result state ───────────────────────────────────────────────────
@@ -227,13 +228,14 @@ export default function Home() {
             setCurrentStep(3);
             setUploadStatus(PROCESS_STEPS[3]);
             const aiResult = await generateFreeSummary({ jobId, extractedText: ocrResult.extractedText });
-
+            console.log("[handleSubmit] AI result received", aiResult);
             setCurrentStep(4);
             setUploadStatus(PROCESS_STEPS[4]);
 
             // ── Category mismatch: show mismatch screen, no payment ──
+            // AFTER
             if (aiResult.categoryCorrect === false) {
-                setCategoryMismatch({ suggestedCategory: aiResult.suggestedCategory ?? null });
+                setCategoryMismatch({ topCategories: aiResult.topCategories ?? [] });
                 setView("category_mismatch");
                 return;
             }
@@ -542,11 +544,7 @@ export default function Home() {
                 {/* ── Category mismatch screen ── */}
                 {view === "category_mismatch" && (
                     <div style={{ background: "#f8fafc", minHeight: "calc(100vh - 66px)" }}>
-                        <CategoryMismatchView
-                            categories={categories}
-                            suggestedCategory={categoryMismatch?.suggestedCategory ?? null}
-                            onRetry={handleReset}
-                        />
+                        <CategoryMismatchView categories={categories} topCategories={categoryMismatch?.topCategories ?? []} onRetry={handleReset} />
                     </div>
                 )}
 
@@ -605,13 +603,12 @@ export default function Home() {
 }
 
 // ─── CategoryMismatchView ─────────────────────────────────────────────────────
-
 function CategoryMismatchView({
-    suggestedCategory,
+    topCategories,
     onRetry,
     categories,
 }: {
-    suggestedCategory: string | null;
+    topCategories: { name: string; confidence: number }[];
     onRetry: () => void;
     categories: { _id: string; name: string }[];
 }) {
@@ -687,8 +684,6 @@ function CategoryMismatchView({
                             pointerEvents: "none",
                         }}
                     />
-
-                    {/* Status pill */}
                     <div
                         style={{
                             display: "inline-flex",
@@ -701,30 +696,12 @@ function CategoryMismatchView({
                             marginBottom: 14,
                         }}
                     >
-                        <div
-                            style={{
-                                width: 7,
-                                height: 7,
-                                borderRadius: "50%",
-                                background: "#fbbf24",
-                                boxShadow: "0 0 6px #fbbf24",
-                            }}
-                        />
+                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#fbbf24", boxShadow: "0 0 6px #fbbf24" }} />
                         <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#fbbf24", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                             Category Mismatch
                         </span>
                     </div>
-
-                    <h2
-                        style={{
-                            fontSize: "1.75rem",
-                            fontWeight: 900,
-                            color: "#fff",
-                            lineHeight: 1.15,
-                            margin: 0,
-                            letterSpacing: "-0.02em",
-                        }}
-                    >
+                    <h2 style={{ fontSize: "1.75rem", fontWeight: 900, color: "#fff", lineHeight: 1.15, margin: 0, letterSpacing: "-0.02em" }}>
                         Looks Like the Wrong{" "}
                         <span
                             style={{
@@ -737,93 +714,90 @@ function CategoryMismatchView({
                         </span>
                     </h2>
                     <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.5)", marginTop: 8, fontWeight: 500, lineHeight: 1.5 }}>
-                        Our system detected that your document doesn&apos;t match the category you selected.
+                        Your document didn&apos;t match the selected category. Here&apos;s where our AI thinks it belongs:
                     </p>
                 </div>
 
                 {/* Body */}
                 <div style={{ padding: "32px 36px", display: "flex", flexDirection: "column", gap: 20 }}>
+                    {/* Top categories with confidence bars */}
+                    {topCategories.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                            {topCategories.map((cat, i) => (
+                                <div
+                                    key={cat.name}
+                                    style={{
+                                        padding: "14px 18px",
+                                        borderRadius: 14,
+                                        background: i === 0 ? "linear-gradient(135deg,#f0fdfd,#e8faf9)" : "#f8fafc",
+                                        border: `1.5px solid ${i === 0 ? "#b2eeec" : "#e2e8f0"}`,
+                                    }}
+                                >
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            {i === 0 && (
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#12A1A6" strokeWidth="2.5">
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                    />
+                                                </svg>
+                                            )}
+                                            <span style={{ fontSize: "0.92rem", fontWeight: 800, color: i === 0 ? "#0F233F" : "#475569" }}>
+                                                {cat.name}
+                                            </span>
+                                        </div>
+                                        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: i === 0 ? "#12A1A6" : "#94a3b8" }}>
+                                            {cat.confidence}%
+                                        </span>
+                                    </div>
+                                    {/* Confidence bar */}
+                                    <div style={{ height: 5, borderRadius: 99, background: "#e2e8f0", overflow: "hidden" }}>
+                                        <div
+                                            style={{
+                                                height: "100%",
+                                                width: `${cat.confidence}%`,
+                                                borderRadius: 99,
+                                                background: i === 0 ? "linear-gradient(90deg,#12A1A6,#54D6D4)" : "#cbd5e1",
+                                                transition: "width 0.6s ease",
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Explanation */}
                     <div
                         style={{
-                            padding: "18px 20px",
-                            borderRadius: 16,
+                            padding: "16px 18px",
+                            borderRadius: 14,
                             background: "#fffbeb",
                             border: "1px solid #fde68a",
                             display: "flex",
-                            gap: 14,
+                            gap: 12,
                             alignItems: "flex-start",
                         }}
                     >
-                        <div
-                            style={{
-                                width: 36,
-                                height: 36,
-                                borderRadius: 10,
-                                background: "#fef3c7",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                flexShrink: 0,
-                            }}
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#b45309"
+                            strokeWidth="2"
+                            style={{ flexShrink: 0, marginTop: 1 }}
                         >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2">
-                                <circle cx="12" cy="12" r="10" />
-                                <path strokeLinecap="round" d="M12 8v4m0 4h.01" />
-                            </svg>
-                        </div>
-                        <p style={{ fontSize: "0.87rem", color: "#78350f", lineHeight: 1.7, margin: 0 }}>
-                            To keep your results accurate and relevant, we only process documents under their correct category. Please go back and
-                            re-upload your document with the right category selected.
+                            <circle cx="12" cy="12" r="10" />
+                            <path strokeLinecap="round" d="M12 8v4m0 4h.01" />
+                        </svg>
+                        <p style={{ fontSize: "0.85rem", color: "#78350f", lineHeight: 1.7, margin: 0 }}>
+                            Please go back and re-upload your document with the correct category selected. If your document genuinely belongs to the
+                            category you chose, it may have been misread — try uploading a clearer scan.
                         </p>
                     </div>
-
-                    {/* Suggested category */}
-                    {suggestedCategory && (
-                        <div
-                            style={{
-                                padding: "18px 20px",
-                                borderRadius: 16,
-                                background: "linear-gradient(135deg,#f0fdfd,#e8faf9)",
-                                border: "1.5px solid #b2eeec",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 14,
-                            }}
-                        >
-                            <div
-                                style={{
-                                    width: 36,
-                                    height: 36,
-                                    borderRadius: 10,
-                                    background: "linear-gradient(135deg,rgba(18,161,166,0.15),rgba(84,214,212,0.15))",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    flexShrink: 0,
-                                }}
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#12A1A6" strokeWidth="2">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p
-                                    style={{
-                                        fontSize: "0.75rem",
-                                        fontWeight: 700,
-                                        color: "#12A1A6",
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.08em",
-                                        margin: "0 0 3px",
-                                    }}
-                                >
-                                    Suggested Category
-                                </p>
-                                <p style={{ fontSize: "1rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>{suggestedCategory}</p>
-                            </div>
-                        </div>
-                    )}
 
                     {/* CTA */}
                     <button
@@ -844,13 +818,12 @@ function CategoryMismatchView({
                             alignItems: "center",
                             justifyContent: "center",
                             gap: 10,
-                            boxShadow: "0 4px 20px rgba(15,35,63,0.25), 0 1px 0 rgba(255,255,255,0.1) inset",
+                            boxShadow: "0 4px 20px rgba(15,35,63,0.25)",
                             letterSpacing: "0.01em",
                             position: "relative",
                             overflow: "hidden",
                         }}
                     >
-                        {/* Teal accent stripe */}
                         <div
                             style={{
                                 position: "absolute",
@@ -867,7 +840,6 @@ function CategoryMismatchView({
                         </svg>
                         Go Back &amp; Re-upload
                     </button>
-
                     <p style={{ fontSize: "0.78rem", color: "#94a3b8", textAlign: "center", margin: 0, fontWeight: 500 }}>
                         No charge has been made. You can re-upload with the correct category at no cost.
                     </p>
