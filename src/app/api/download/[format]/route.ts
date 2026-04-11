@@ -64,6 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
                 `Reference: ${referenceId}`,
                 `Date: ${dateStr}`,
                 "",
+                // stripMarkdown(breakdownText), // was just breakdownText
                 breakdownText,
                 "",
                 "---",
@@ -113,6 +114,28 @@ function stripInline(line: string): string {
         .replace(/\*(.+?)\*/g, "$1")
         .replace(/`(.+?)`/g, "$1");
 }
+function stripMarkdown(text: string): string {
+    return text
+        .split("\n")
+        .map((line) => {
+            const trimmed = line.trimEnd();
+            // Remove heading markers
+            if (/^#{1,6}\s+/.test(trimmed)) return trimmed.replace(/^#{1,6}\s+/, "");
+            // Remove bullet markers
+            if (/^[-*]\s+/.test(trimmed)) return "• " + trimmed.slice(2);
+            // Remove ordered list markers (keep the number)
+            const ol = trimmed.match(/^(\d+)\.\s+(.*)/);
+            if (ol) return `${ol[1]}. ${ol[2]}`;
+            // Remove horizontal rules
+            if (/^---+$/.test(trimmed)) return "";
+            // Strip inline markdown
+            return trimmed
+                .replace(/\*\*(.+?)\*\*/g, "$1")
+                .replace(/\*(.+?)\*/g, "$1")
+                .replace(/`(.+?)`/g, "$1");
+        })
+        .join("\n");
+}
 
 function parseInlineDocx(line: string, baseSize = 22): TextRun[] {
     const runs: TextRun[] = [];
@@ -146,34 +169,21 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
         try {
             const doc = new PDFDocument({ margin: 50, autoFirstPage: false, size: "A4" });
 
-            // OPTIONAL FALLBACK: If the next.config.js fix fails on your host, uncomment this block
-            // and place a font file like 'Roboto-Regular.ttf' inside a `public/fonts` directory.
-            /*
-            const fontPath = path.join(process.cwd(), 'public', 'fonts', 'Roboto-Regular.ttf');
-            doc.registerFont('CustomFont', fontPath);
-            const defaultFont = 'CustomFont';
-            */
-            // If using the fallback, replace all instances of "Helvetica" below with defaultFont
-
             const chunks: Buffer[] = [];
-
             doc.on("data", (chunk: Buffer) => chunks.push(chunk));
             doc.on("end", () => resolve(Buffer.concat(chunks)));
             doc.on("error", reject);
 
-            // ── Footer on every page ──
             let writingFooter = false;
             doc.on("pageAdded", () => {
                 if (writingFooter) return;
                 writingFooter = true;
 
-                // 1. Save cursor position and temporarily remove the bottom margin
                 const originalX = doc.x;
                 const originalY = doc.y;
                 const originalBottomMargin = doc.page.margins.bottom;
                 doc.page.margins.bottom = 0;
 
-                // 2. Write the footer at the bottom
                 doc.fontSize(7)
                     .fillColor("#94a3b8")
                     .font("Helvetica")
@@ -183,88 +193,46 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
                         lineBreak: false,
                     });
 
-                // 3. Restore the cursor and the margin so normal content writes correctly
                 doc.x = originalX;
                 doc.y = originalY;
                 doc.page.margins.bottom = originalBottomMargin;
-
                 writingFooter = false;
             });
 
             doc.addPage();
 
             // ── Title block ──
-            doc.fontSize(18).fillColor("#0d9488").font("Helvetica-Bold").text("ExplainMyLetter Breakdown", { align: "center" });
+            doc.fontSize(18)
+                .fillColor("#12A1A6")
+                .font("Helvetica-Bold")
+                .text("ExplainMyLetter Breakdown", { align: "center" });
+
+            doc.moveDown(0.3);
+            doc.fontSize(9)
+                .fillColor("#64748b")
+                .font("Helvetica")
+                .text(`Ref: ${referenceId}   |   Date: ${dateStr}`, { align: "right" });
 
             doc.moveDown(0.4);
-            doc.fontSize(9).fillColor("#64748b").font("Helvetica").text(`Ref: ${referenceId}   |   Date: ${dateStr}`, { align: "right" });
-
-            doc.moveDown(0.5);
             doc.moveTo(50, doc.y)
                 .lineTo(doc.page.width - 50, doc.y)
                 .strokeColor("#e2e8f0")
                 .lineWidth(1)
                 .stroke();
-            doc.moveDown(1);
+            doc.moveDown(0.8);
 
             // ── Render markdown lines ──
-            // Trim the entire text before splitting to avoid trailing empty lines causing blank pages
             const lines = text.trim().split("\n");
+
             for (const raw of lines) {
                 const line = raw.trimEnd();
 
                 if (!line) {
-                    doc.moveDown(0.4);
-                    continue;
-                }
-
-                if (line.startsWith("## ")) {
-                    doc.moveDown(0.6);
-                    doc.fontSize(13)
-                        .fillColor("#12A1A6") // was #0F233F
-                        .font("Helvetica-Bold")
-                        .text(stripInline(line.slice(3)));
                     doc.moveDown(0.3);
                     continue;
                 }
 
-                if (line.startsWith("### ")) {
-                    doc.moveDown(0.4);
-                    doc.fontSize(11)
-                        .fillColor("#12A1A6")
-                        .font("Helvetica-Bold")
-                        .text(stripInline(line.slice(4)));
-                    doc.moveDown(0.2);
-                    continue;
-                }
-
-                if (line.startsWith("# ")) {
-                    doc.moveDown(0.6);
-                    doc.fontSize(15)
-                        .fillColor("#12A1A6") // was #0F233F
-                        .font("Helvetica-Bold")
-                        .text(stripInline(line.slice(2)));
-                    doc.moveDown(0.3);
-                    continue;
-                }
-
-                if (line.startsWith("- ") || line.startsWith("* ")) {
-                    doc.fontSize(10)
-                        .fillColor("#334155")
-                        .font("Helvetica")
-                        .text("• " + stripInline(line.slice(2)), { indent: 12 });
-                    continue;
-                }
-
-                const olMatch = line.match(/^(\d+)\.\s+(.*)/);
-                if (olMatch) {
-                    doc.fontSize(10)
-                        .fillColor("#334155")
-                        .font("Helvetica")
-                        .text(`${olMatch[1]}. ${stripInline(olMatch[2])}`, { indent: 12 });
-                    continue;
-                }
-
+                // Horizontal rule
                 if (/^---+$/.test(line.trim())) {
                     doc.moveDown(0.3);
                     doc.moveTo(50, doc.y)
@@ -276,7 +244,161 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
                     continue;
                 }
 
-                doc.fontSize(10).fillColor("#334155").font("Helvetica").text(stripInline(line));
+                // ### H3
+                if (line.startsWith("### ")) {
+                    doc.moveDown(0.4);
+                    doc.fontSize(11)
+                        .fillColor("#12A1A6")
+                        .font("Helvetica-Bold")
+                        .text(stripInline(line.slice(4)));
+                    doc.moveDown(0.2);
+                    continue;
+                }
+
+                // ## H2
+                if (line.startsWith("## ")) {
+                    doc.moveDown(0.5);
+                    doc.fontSize(13)
+                        .fillColor("#12A1A6")
+                        .font("Helvetica-Bold")
+                        .text(stripInline(line.slice(3)));
+                    doc.moveDown(0.15);
+                    doc.moveTo(50, doc.y)
+                        .lineTo(doc.page.width - 50, doc.y)
+                        .strokeColor("#e2e8f0")
+                        .lineWidth(0.5)
+                        .stroke();
+                    doc.moveDown(0.3);
+                    continue;
+                }
+
+                // # H1
+                if (line.startsWith("# ")) {
+                    doc.moveDown(0.5);
+                    doc.fontSize(15)
+                        .fillColor("#12A1A6")
+                        .font("Helvetica-Bold")
+                        .text(stripInline(line.slice(2)));
+                    doc.moveDown(0.15);
+                    doc.moveTo(50, doc.y)
+                        .lineTo(doc.page.width - 50, doc.y)
+                        .strokeColor("#e2e8f0")
+                        .lineWidth(1)
+                        .stroke();
+                    doc.moveDown(0.3);
+                    continue;
+                }
+
+                // Indented bullets (must come before top-level bullets)
+                const indentedBullet = line.match(/^(\s+)[-*]\s+(.*)/);
+                if (indentedBullet) {
+                    const depth = Math.floor(indentedBullet[1].length / 2);
+                    const content = indentedBullet[2];
+                    const boldMatch = content.match(/^\*\*(.+?)\*\*\s*(.*)/);
+                    if (boldMatch) {
+                        doc.fontSize(10)
+                            .fillColor("#334155")
+                            .font("Helvetica-Bold")
+                            .text("•  " + stripInline(boldMatch[1]), {
+                                indent: 10 + depth * 16,
+                                lineGap: 2,
+                                continued: boldMatch[2].length > 0,
+                            });
+                        if (boldMatch[2]) {
+                            doc.fontSize(10)
+                                .fillColor("#334155")
+                                .font("Helvetica")
+                                .text("  " + stripInline(boldMatch[2]), { lineGap: 2 });
+                        }
+                    } else {
+                        doc.fontSize(10)
+                            .fillColor("#334155")
+                            .font("Helvetica")
+                            .text("•  " + stripInline(content), {
+                                indent: 10 + depth * 16,
+                                lineGap: 2,
+                            });
+                    }
+                    doc.moveDown(0.12);
+                    continue;
+                }
+
+                // Top-level bullets
+                if (line.startsWith("- ") || line.startsWith("* ")) {
+                    const content = line.slice(2);
+                    const boldMatch = content.match(/^\*\*(.+?)\*\*\s*(.*)/);
+                    if (boldMatch) {
+                        doc.fontSize(10)
+                            .fillColor("#334155")
+                            .font("Helvetica-Bold")
+                            .text("•  " + stripInline(boldMatch[1]), {
+                                indent: 10,
+                                lineGap: 2,
+                                continued: boldMatch[2].length > 0,
+                            });
+                        if (boldMatch[2]) {
+                            doc.fontSize(10)
+                                .fillColor("#334155")
+                                .font("Helvetica")
+                                .text("  " + stripInline(boldMatch[2]), { lineGap: 2 });
+                        }
+                    } else {
+                        doc.fontSize(10)
+                            .fillColor("#334155")
+                            .font("Helvetica")
+                            .text("•  " + stripInline(content), { indent: 10, lineGap: 2 });
+                    }
+                    doc.moveDown(0.15);
+                    continue;
+                }
+
+                // Ordered list
+                const olMatch = line.match(/^(\d+)\.\s+(.*)/);
+                if (olMatch) {
+                    doc.fontSize(10)
+                        .fillColor("#334155")
+                        .font("Helvetica")
+                        .text(`${olMatch[1]}.  ${stripInline(olMatch[2])}`, { indent: 10, lineGap: 2 });
+                    doc.moveDown(0.15);
+                    continue;
+                }
+
+                // **Bold label only** (nothing after closing **)
+                const termLabel = line.match(/^\*\*(.+?)\*\*\s*$/);
+                if (termLabel) {
+                    doc.moveDown(0.3);
+                    doc.fontSize(11)
+                        .fillColor("#0F233F")
+                        .font("Helvetica-Bold")
+                        .text(stripInline(termLabel[1]));
+                    doc.moveDown(0.15);
+                    continue;
+                }
+
+                // **Bold label** with trailing text on same line
+                const termWithText = line.match(/^\*\*(.+?)\*\*\s+(.*)/);
+                if (termWithText) {
+                    doc.moveDown(0.2);
+                    doc.fontSize(10)
+                        .fillColor("#12A1A6")
+                        .font("Helvetica-Bold")
+                        .text(stripInline(termWithText[1]));
+                    if (termWithText[2]) {
+                        doc.fontSize(10)
+                            .fillColor("#334155")
+                            .font("Helvetica")
+                            .text(stripInline(termWithText[2]), { lineGap: 2 });
+                    }
+                    doc.moveDown(0.15);
+                    continue;
+                }
+
+                // Default paragraph
+                doc.fontSize(10)
+                    .fillColor("#334155")
+                    .font("Helvetica")
+                    .text(stripInline(line), { lineGap: 2 });
+                doc.moveDown(0.2);
             }
 
             doc.end();
@@ -285,7 +407,6 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
         }
     });
 }
-
 // ─── DOCX generator ───────────────────────────────────────────────────────────
 
 async function generateDOCX(text: string, referenceId: string, dateStr: string): Promise<Buffer> {

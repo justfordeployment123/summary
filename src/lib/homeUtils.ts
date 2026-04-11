@@ -71,6 +71,51 @@ export function markdownToHtml(md: string): string {
             continue;
         }
 
+        // ── Horizontal Rule ────────────────────────────────────────────────
+        if (line.trim() === "---") {
+            continue;
+        }
+
+        // ── #### Sub-sub-heading ───────────────────────────────────────────
+        const h4 = line.match(/^####\s+(.*)/);
+        if (h4) {
+            out.push(`
+              <h4 style="
+                font-size: 1.05rem;
+                font-weight: 700;
+                color: #12A1A6;
+                margin: 14px 0 6px 0;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <span style="width: 3px; height: 14px; background: #54D6D4; border-radius: 2px; display: inline-block; flex-shrink: 0;"></span>
+                ${inline(h4[1])}
+              </h4>
+            `);
+            continue;
+        }
+
+        // ── ### Sub-heading ────────────────────────────────────────────────
+        const h3 = line.match(/^###\s+(.*)/);
+        if (h3) {
+            out.push(`
+              <h3 style="
+                font-size: 1.3rem;
+                font-weight: 800;
+                color: #12A1A6;
+                margin: 20px 0 10px 0;
+                letter-spacing: -0.01em;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              ">
+                <span style="color: #54D6D4;">&#9658;</span> ${inline(h3[1])}
+              </h3>
+            `);
+            continue;
+        }
+
         // ── ## Major Section Heading ───────────────────────────────────────
         const h2 = line.match(/^##\s+(.*)/);
         if (h2) {
@@ -95,33 +140,29 @@ export function markdownToHtml(md: string): string {
             continue;
         }
 
-        // ── ### Sub-heading ────────────────────────────────────────────────
-        const h3 = line.match(/^###\s+(.*)/);
-        if (h3) {
+        // ── Indented Bullet (sub-point) ────────────────────────────────────
+        const indentedUl = line.match(/^(\s+)[-*]\s+(.*)/);
+        if (indentedUl) {
+            const depth = Math.floor(indentedUl[1].length / 2);
+            const paddingLeft = 8 + depth * 24;
             out.push(`
-              <h3 style="
-                font-size: 1.3rem;
-                font-weight: 800;
-                color: #12A1A6;
-                margin: 20px 0 10px 0;
-                letter-spacing: -0.01em;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-              ">
-                <span style="color: #12A1A6;">▸</span> ${inline(h3[1])}
-              </h3>
+              <div style="display: flex; gap: 14px; margin-bottom: 8px; padding-left: ${paddingLeft}px;">
+                <div style="display: flex; flex-direction: column; align-items: center; padding-top: 10px;">
+                  <div style="width: 6px; height: 6px; border-radius: 50%; background: #54D6D4; flex-shrink: 0;"></div>
+                </div>
+                <div style="font-size: 1.05rem; color: #334155; line-height: 1.7;">${inline(indentedUl[2])}</div>
+              </div>
             `);
             continue;
         }
 
-        // ── Bullet Lists ───────────────────────────────────────────────────
+        // ── Top-level Bullet ───────────────────────────────────────────────
         const ulMatch = line.match(/^[-*]\s+(.*)/);
         if (ulMatch) {
             out.push(`
               <div style="display: flex; gap: 18px; margin-bottom: 10px; padding-left: 8px;">
                 <div style="display: flex; flex-direction: column; align-items: center; padding-top: 12px;">
-                    <div style="width: 8px; height: 8px; border-radius: 50%; background: #54D6D4; box-shadow: 0 0 0 4px #e0f2f1; flex-shrink: 0;"></div>
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #54D6D4; box-shadow: 0 0 0 4px #e0f2f1; flex-shrink: 0;"></div>
                 </div>
                 <div style="font-size: 1.1rem; color: #334155;">${inline(ulMatch[1])}</div>
               </div>
@@ -134,34 +175,46 @@ export function markdownToHtml(md: string): string {
         if (olMatch) {
             out.push(`
               <div style="display: flex; gap: 24px; margin: 12px 0; background: #fbfcfd; padding: 16px 8px; border-radius: 16px; border: 1px solid #f1f5f9; border-left: 5px solid #12A1A6;">
-                <div style="
-                    font-size: 1.8rem; font-weight: 900; color: #12A1A6; opacity: 0.3; line-height: 1;
-                ">${olMatch[1]}</div>
-                <div style="font-size: 1.1rem; font-weight: 600; color: #0F233F; line-height: 1.6;">${inline(olMatch[2])}</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #12A1A6; opacity: 0.3; line-height: 1;">
+                  ${olMatch[1]}
+                </div>
+                <div style="font-size: 1.1rem; font-weight: 600; color: #0F233F; line-height: 1.6;">
+                  ${inline(olMatch[2])}
+                </div>
               </div>
             `);
             continue;
         }
 
-        // ── **Bold Term** Definition ───────────────────────────────────────
-        const termLine = line.match(/^\*\*(.+?)\*\*\s*(.*)/);
-        if (termLine) {
+        // ── **Bold Label** only (nothing after) ───────────────────────────
+        const termLabel = line.match(/^\*\*(.+?)\*\*\s*$/);
+        if (termLabel) {
             out.push(`
-              <div style="margin: 16px 0; padding-left: 12px; border-left: 3px solid #f1f5f9;">
-                <div style="font-size: 0.85rem; font-weight: 800; color: #12A1A6; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 4px;">
-                    ${inline(termLine[1])}
-                </div>
-                <div style="font-size: 1.1rem; color: #1e293b; font-weight: 500;">
-                    ${inline(termLine[2])}
+              <div style="margin: 20px 0 6px 0;">
+                <div style="font-size: 1.1rem; font-weight: 800; color: #0F233F;">
+                  ${inline(termLabel[1])}
                 </div>
               </div>
             `);
             continue;
         }
-        // ── Horizontal Rule ────────────────────────────────────────────────
-        if (line.trim() === "---") {
+
+        // ── **Bold Label** with trailing text ─────────────────────────────
+        const termWithText = line.match(/^\*\*(.+?)\*\*\s+(.*)/);
+        if (termWithText) {
+            out.push(`
+              <div style="margin: 16px 0; padding-left: 12px; border-left: 3px solid #f1f5f9;">
+                <div style="font-size: 0.85rem; font-weight: 800; color: #12A1A6; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 4px;">
+                  ${inline(termWithText[1])}
+                </div>
+                <div style="font-size: 1.1rem; color: #1e293b; font-weight: 500;">
+                  ${inline(termWithText[2])}
+                </div>
+              </div>
+            `);
             continue;
         }
+
         // ── Default Paragraph ──────────────────────────────────────────────
         out.push(`
           <p style="font-size: 1.1rem; color: #334155; margin: 0 0 12px 0; font-weight: 400; line-height: 1.9;">
@@ -171,7 +224,7 @@ export function markdownToHtml(md: string): string {
     }
 
     // ── Disclaimer ────────────────────────────────────────────────────────
-    const footer = out.findIndex((l) => l.toLowerCase().includes("ai-generated"));
+    const footer = out.findIndex((l) => l.toLowerCase().includes("informational purposes only and does not constitute"));
     if (footer !== -1) {
         out[footer] = `
           <div style="margin-top: 48px; padding: 24px; background: #f8fafc; border-radius: 12px; font-size: 0.95rem; color: #64748b; line-height: 1.6; text-align: center; border: 1px solid #e2e8f0;">
