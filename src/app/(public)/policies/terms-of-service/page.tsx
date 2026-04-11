@@ -359,8 +359,56 @@ export default function TermsOfServicePage() {
                                 </p>
                             </div>
                         </div>
-
-                        {/* Section 6: Contact */}
+                        {/* Section 6: Third Party Services */}
+                        <div
+                            className="policy-card animate-fade-up"
+                            style={{
+                                animationDelay: "700ms",
+                                background: "linear-gradient(135deg,#f0fdfd,#e6faf9)",
+                                borderColor: "#b2eeec",
+                                marginTop: "24px",
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
+                                <div
+                                    style={{
+                                        width: 48,
+                                        height: 48,
+                                        borderRadius: 14,
+                                        background: "#fff",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        flexShrink: 0,
+                                        boxShadow: "0 4px 12px rgba(18,161,166,0.15)",
+                                    }}
+                                >
+                                    {/* Server / Data Icon */}
+                                    <svg
+                                        width="24"
+                                        height="24"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="#12A1A6"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    >
+                                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                                        <line x1="6" y1="6" x2="6.01" y2="6" />
+                                        <line x1="6" y1="18" x2="6.01" y2="18" />
+                                    </svg>
+                                </div>
+                                <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Third Party Services</h2>
+                            </div>
+                            <p style={{ fontSize: "0.95rem", color: "#0e4f52", lineHeight: 1.7, margin: 0 }}>
+                                We may use AI tools (such as ChatGPT) to process information you provide. Your data is handled in line with data
+                                protection laws and our privacy practices. Some data may be temporarily processed on secure third-party servers. By
+                                using our service, you consent to this.
+                            </p>
+                        </div>
+                        {/* Section 7: Contact */}
                         <div
                             className="policy-card animate-fade-up"
                             style={{ animationDelay: "600ms", background: "linear-gradient(135deg,#f0fdfd,#e6faf9)", borderColor: "#b2eeec" }}
@@ -431,6 +479,8 @@ export default function TermsOfServicePage() {
                                 </span>
                             </div>
                         </div>
+                        {/* Section 7; Third Party */}
+                        {/* We may use AI tools (such as ChatGPT) to process information you provide. Your data is handled in line with data protection laws and our privacy practices. Some data may be temporarily processed on secure third-party servers. By using our service, you consent to this. */}
                     </div>
                 </div>
             </div>
