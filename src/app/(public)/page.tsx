@@ -131,7 +131,7 @@ export default function Home() {
     // ── Scroll on view change ─────────────────────────────────────────────────
     useEffect(() => {
         if (view === "summary" && paymentRef.current) {
-            setTimeout(() => paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+            window.scrollTo({ top: 0, left: 0   , behavior: "instant" });
         }
     }, [view]);
 
@@ -714,7 +714,7 @@ function CategoryMismatchView({
                         </span>
                     </h2>
                     <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.5)", marginTop: 8, fontWeight: 500, lineHeight: 1.5 }}>
-                        Your document didn&apos;t match the selected category. Here&apos;s where our AI thinks it belongs:
+                        Your document didn&apos;t match the selected category. Here&apos;s where our Automated Technology thinks it belongs:
                     </p>
                 </div>
 

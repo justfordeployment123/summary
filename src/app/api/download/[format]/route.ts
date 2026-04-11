@@ -145,7 +145,7 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
     return new Promise((resolve, reject) => {
         try {
             const doc = new PDFDocument({ margin: 50, autoFirstPage: false, size: "A4" });
-            
+
             // OPTIONAL FALLBACK: If the next.config.js fix fails on your host, uncomment this block
             // and place a font file like 'Roboto-Regular.ttf' inside a `public/fonts` directory.
             /*
@@ -154,7 +154,7 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
             const defaultFont = 'CustomFont';
             */
             // If using the fallback, replace all instances of "Helvetica" below with defaultFont
-            
+
             const chunks: Buffer[] = [];
 
             doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -221,7 +221,7 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
                 if (line.startsWith("## ")) {
                     doc.moveDown(0.6);
                     doc.fontSize(13)
-                        .fillColor("#0F233F")
+                        .fillColor("#12A1A6") // was #0F233F
                         .font("Helvetica-Bold")
                         .text(stripInline(line.slice(3)));
                     doc.moveDown(0.3);
@@ -241,7 +241,7 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
                 if (line.startsWith("# ")) {
                     doc.moveDown(0.6);
                     doc.fontSize(15)
-                        .fillColor("#0F233F")
+                        .fillColor("#12A1A6") // was #0F233F
                         .font("Helvetica-Bold")
                         .text(stripInline(line.slice(2)));
                     doc.moveDown(0.3);
@@ -303,7 +303,7 @@ async function generateDOCX(text: string, referenceId: string, dateStr: string):
         if (line.startsWith("## ")) {
             children.push(
                 new Paragraph({
-                    children: [new TextRun({ text: stripInline(line.slice(3)), bold: true, size: 28, color: "0F233F" })],
+                    children: [new TextRun({ text: stripInline(line.slice(3)), bold: true, size: 28, color: "12A1A6" })], // was 0F233F
                     spacing: { before: 300, after: 120 },
                 }),
             );
@@ -323,7 +323,7 @@ async function generateDOCX(text: string, referenceId: string, dateStr: string):
         if (line.startsWith("# ")) {
             children.push(
                 new Paragraph({
-                    children: [new TextRun({ text: stripInline(line.slice(2)), bold: true, size: 32, color: "0F233F" })],
+                    children: [new TextRun({ text: stripInline(line.slice(2)), bold: true, size: 32, color: "12A1A6" })], // was 0F233F
                     spacing: { before: 360, after: 160 },
                 }),
             );
