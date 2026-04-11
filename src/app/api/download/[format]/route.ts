@@ -66,8 +66,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
                 `Reference: ${referenceId}`,
                 `Date: ${dateStr}`,
                 "",
-                // stripMarkdown(breakdownText), // was just breakdownText
-                breakdownText,
+                stripMarkdown(breakdownText), // was just breakdownText
+                // breakdownText,
                 "",
                 "---",
                 DISCLAIMER,
