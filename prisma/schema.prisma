@@ -1,0 +1,92 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+generator client {
+  provider = "prisma-client-js" // <-- Add the "-js" here
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+// --- ENUMS ---
+enum PromptType {
+  free
+  paid
+  upsell
+}
+
+// --- MODELS ---
+
+model Category {
+  id         String   @id @default(uuid())
+  name       String
+  slug       String   @unique
+  base_price Int      @default(499) // Stored in pennies
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  // Relations
+  prompts    Prompt[]
+}
+
+model Upsell {
+  id              String   @id @default(uuid())
+  name            String
+  description     String
+  is_active       Boolean  @default(true)
+  
+  // NoSQL Map translation -> Postgres JSON
+  // Stores data like: { "category_id_1": 499, "category_id_2": 599 }
+  category_prices Json     @default("{}") 
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Setting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  
+  // NoSQL Mixed Type translation -> Postgres JSON
+  // Can securely hold strings, numbers, booleans, or nested objects
+  value       Json     
+  
+  description String?
+  createdAt   DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+model Prompt {
+  id          String     @id @default(uuid())
+  
+  // Foreign Key to Category
+  category_id String?
+  category    Category?  @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  
+  type        PromptType
+  prompt_text String     @db.Text // @db.Text ensures Postgres allocates enough space for long prompts
+  version     Int        @default(1)
+  is_active   Boolean    @default(true)
+  updated_at  DateTime   @updatedAt
+
+  // Relation to historical versions
+  versions    PromptVersion[]
+}
+
+model PromptVersion {
+  id          String   @id @default(uuid())
+  
+  // Foreign Key to Prompt
+  prompt_id   String
+  prompt      Prompt   @relation(fields: [prompt_id], references: [id], onDelete: Cascade)
+  
+  version     Int
+  prompt_text String   @db.Text
+  updated_at  DateTime @default(now())
+
+  // Prisma handles indexes slightly differently than Mongoose. 
+  // This creates the compound index for fast version history lookups.
+  @@index([prompt_id, version(sort: Desc)]) 
+}
