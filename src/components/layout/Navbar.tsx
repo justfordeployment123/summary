@@ -24,10 +24,13 @@ export function Navbar() {
         { label: "Why Choose Us", href: "/why-choose-us" },
         { label: "FAQs", href: "/faqs" },
     ];
-
     const handleUploadClick = () => {
         setMobileMenuOpen(false);
-        router.push("/#upload");
+        if (pathname === "/") {
+            window.dispatchEvent(new CustomEvent("navbar:reset"));
+        } else {
+            router.push("/#upload");
+        }
     };
 
     return (
@@ -57,9 +60,10 @@ export function Navbar() {
                 }}
             >
                 {/* Logo */}
-                <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                {/* <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}></Link> */}
+                <button onClick={handleUploadClick}>
                     <img src="/horizontal-logo.png" alt="ExplainMyLetter" style={{ height: 50, borderRadius: 10 }} />
-                </Link>
+                </button>
 
                 {/* Desktop tabs */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }} className="desktop-nav">

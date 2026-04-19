@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { GlobalStyles, HeroSection, UploadSection, SummaryView, CompletedView } from "@/components/home";
 import { PROCESS_STEPS, MAX_POLLS, POLL_INTERVAL } from "@/lib/homeUtils";
 import type { Category, Upsell, SummaryData, CompletedData, ViewState, UrgencyLevel } from "@/types/home";
+import { useRouter } from "next/navigation";
 
 // ─── Safe JSON helper ─────────────────────────────────────────────────────────
 // Detects Cloudflare HTML error pages before attempting JSON.parse,
@@ -83,8 +84,10 @@ export default function Home() {
     const formRef = useRef<HTMLElement | null>(null);
     const paymentRef = useRef<HTMLDivElement | null>(null);
     // Add with your other refs:
+
     const turnstileResetRef = useRef<(() => void) | null>(null);
 
+    const router = useRouter();
     // ── Initial data fetch ────────────────────────────────────────────────────
     useEffect(() => {
         async function fetchData() {
@@ -128,10 +131,18 @@ export default function Home() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    useEffect(() => {
+        const handler = () => {
+            handleRetryWithData();
+            router.push("/#upload");
+        };
+        window.addEventListener("navbar:reset", handler);
+        return () => window.removeEventListener("navbar:reset", handler);
+    }, []);
     // ── Scroll on view change ─────────────────────────────────────────────────
     useEffect(() => {
         if (view === "summary" && paymentRef.current) {
-            window.scrollTo({ top: 0, left: 0   , behavior: "instant" });
+            window.scrollTo({ top: 0, left: 0, behavior: "instant" });
         }
     }, [view]);
 
@@ -500,6 +511,24 @@ export default function Home() {
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
+    // ── Soft reset — keeps form data, only clears upload/result state ─────────
+    const handleRetryWithData = () => {
+        setView("form");
+        // setFile(null);
+        setUploadStatus("");
+        setIsError(false);
+        setSummaryData(null);
+        setCompletedData(null);
+        setSelectedUpsells([]);
+        setCurrentStep(0);
+        setClientSecret(null);
+        setShowPaymentForm(false);
+        setIsPaymentProcessing(false);
+        setCategoryMismatch(null);
+        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        router.push("/#upload");
+    };
 
     const scrollToUpload = () => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -544,7 +573,11 @@ export default function Home() {
                 {/* ── Category mismatch screen ── */}
                 {view === "category_mismatch" && (
                     <div style={{ background: "#f8fafc", minHeight: "calc(100vh - 66px)" }}>
-                        <CategoryMismatchView categories={categories} topCategories={categoryMismatch?.topCategories ?? []} onRetry={handleReset} />
+                        <CategoryMismatchView
+                            categories={categories}
+                            topCategories={categoryMismatch?.topCategories ?? []}
+                            onRetry={handleRetryWithData}
+                        />
                     </div>
                 )}
 
@@ -574,7 +607,7 @@ export default function Home() {
                             onHidePaymentForm={handleHidePaymentForm}
                             uploadStatus={uploadStatus}
                             isError={isError}
-                            handleReset={handleReset}
+                            handleReset={handleRetryWithData}
                             paymentRef={paymentRef}
                             view={view}
                             pollStatus={pollStatus}
@@ -591,7 +624,7 @@ export default function Home() {
                             summaryData={summaryData}
                             completedData={completedData}
                             handleDownload={handleDownload}
-                            handleReset={handleReset}
+                            handleReset={handleRetryWithData}
                             jobId={summaryData.jobId}
                             accessToken={summaryData.accessToken}
                         />

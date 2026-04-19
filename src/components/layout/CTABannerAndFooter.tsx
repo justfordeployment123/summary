@@ -186,6 +186,9 @@ export function Footer() {
                     <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.25)", maxWidth: 440, textAlign: "right" }}>
                         Summaries are for informational purposes only and do not constitute legal, financial, medical, or professional advice.
                     </p>
+                    <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.25)" }}>
+                        Registered with the Information Commissioner’s Office (ICO)
+                    </p>
                 </div>
             </div>
         </footer>

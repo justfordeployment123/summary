@@ -10,9 +10,28 @@ export default function TermsOfServicePage() {
         router.push("/#upload-section");
     };
 
+    const checkIcon = (
+        <div
+            style={{
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                background: "rgba(18,161,166,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                marginTop: 2,
+            }}
+        >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#12A1A6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+            </svg>
+        </div>
+    );
+
     return (
         <div style={{ minHeight: "calc(100vh - 66px)", background: "#f8fafc", display: "flex", flexDirection: "column" }}>
-            {/* Custom keyframes and card styles */}
             <style>{`
                 @keyframes fadeUp {
                     from { opacity: 0; transform: translateY(20px); }
@@ -39,7 +58,6 @@ export default function TermsOfServicePage() {
                 }
             `}</style>
 
-            {/* Main Content Area */}
             <div style={{ flex: 1, padding: "60px 24px 80px" }}>
                 <div style={{ maxWidth: 860, margin: "0 auto" }}>
                     {/* Page Header */}
@@ -74,24 +92,14 @@ export default function TermsOfServicePage() {
                         >
                             Terms of Service
                         </h1>
-                        <p
-                            style={{
-                                fontSize: "1.1rem",
-                                color: "#64748b",
-                                marginTop: 16,
-                                maxWidth: 660,
-                                margin: "16px auto 0",
-                                lineHeight: 1.6,
-                            }}
-                        >
-                            These terms explain how Explain My Letter may be used, what you can expect from the service, and the responsibilities that
-                            apply when using the platform.
+                        <p style={{ fontSize: "1.1rem", color: "#64748b", marginTop: 16, maxWidth: 660, margin: "16px auto 0", lineHeight: 1.6 }}>
+                            These terms explain how Explain My Letter may be used, what you can expect from the service, and your responsibilities
+                            when using the platform.
                         </p>
                     </div>
 
-                    {/* Terms Grid */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-                        {/* Section 1: About the service & No professional advice */}
+                        {/* About the Service + No Professional Advice */}
                         <div className="policy-card animate-fade-up" style={{ animationDelay: "100ms" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                                 <div
@@ -122,8 +130,8 @@ export default function TermsOfServicePage() {
                                 <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>About the Service</h2>
                             </div>
                             <p style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                                Explain My Letter is designed to simplify and clarify the contents of written correspondence, including letters and
-                                emails.
+                                Explain My Letter simplifies and clarifies written correspondence, including letters and emails, using automated
+                                systems.
                             </p>
                             <div
                                 style={{
@@ -138,20 +146,16 @@ export default function TermsOfServicePage() {
                                     ⚠️ No Professional Advice
                                 </strong>
                                 <p style={{ fontSize: "0.9rem", color: "#9f1239", lineHeight: 1.6, margin: 0 }}>
-                                    The service is intended to help users better understand documents, but{" "}
-                                    <strong>
-                                        it does not replace professional legal, financial, medical, immigration, employment, or other regulated
-                                        advice.
-                                    </strong>{" "}
-                                    Explain My Letter provides simplified explanations for information purposes only.
+                                    The service is for informational purposes only. Outputs are generated using automated systems and do not replace
+                                    professional legal, financial, medical, or other regulated advice.
                                 </p>
                             </div>
                         </div>
 
-                        {/* Section 2: Eligibility & User Responsibility (Side-by-side on desktop) */}
+                        {/* Eligibility, User Responsibility, Upload Responsibility */}
                         <div
                             className="animate-fade-up"
-                            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 24, animationDelay: "200ms" }}
+                            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 24, animationDelay: "175ms" }}
                         >
                             <div className="policy-card" style={{ gap: 12 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
@@ -170,9 +174,20 @@ export default function TermsOfServicePage() {
                                     <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Eligibility & Use</h3>
                                 </div>
                                 <p style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.65, margin: 0 }}>
-                                    By using the platform, you confirm that you are authorised to upload the document you submit and that your use of
-                                    the service is lawful. You agree not to misuse the platform or attempt to interfere with its operation.
+                                    By using the platform, you confirm that:
                                 </p>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                    {[
+                                        "You are authorised to upload the document",
+                                        "Your use of the service is lawful",
+                                        "You will not misuse or interfere with the platform",
+                                    ].map((item) => (
+                                        <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                                            {checkIcon}
+                                            <span style={{ fontSize: "0.88rem", color: "#475569", lineHeight: 1.6 }}>{item}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
 
                             <div className="policy-card" style={{ gap: 12 }}>
@@ -191,55 +206,50 @@ export default function TermsOfServicePage() {
                                     </svg>
                                     <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>User Responsibility</h3>
                                 </div>
-                                <p style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.65, margin: 0 }}>
-                                    You remain responsible for how you use the information provided by the platform and for any decisions you take
-                                    based on the summary or breakdown.
-                                </p>
+                                <p style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.65, margin: 0 }}>You remain responsible for:</p>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                    {["How you use the information provided", "Any decisions made based on summaries or breakdowns"].map((item) => (
+                                        <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                                            {checkIcon}
+                                            <span style={{ fontSize: "0.88rem", color: "#475569", lineHeight: 1.6 }}>{item}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Section 3: Payments and Services */}
-                        <div className="policy-card animate-fade-up" style={{ animationDelay: "300ms" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                                <div
-                                    style={{
-                                        width: 48,
-                                        height: 48,
-                                        borderRadius: 14,
-                                        background: "linear-gradient(135deg,rgba(18,161,166,0.12),rgba(84,214,212,0.12))",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        flexShrink: 0,
-                                    }}
-                                >
+                            <div className="policy-card" style={{ gap: 12 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                                     <svg
-                                        width="24"
-                                        height="24"
+                                        width="20"
+                                        height="20"
                                         viewBox="0 0 24 24"
                                         fill="none"
                                         stroke="#12A1A6"
-                                        strokeWidth="2"
+                                        strokeWidth="2.5"
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
                                     >
-                                        <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                        <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                                     </svg>
+                                    <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Upload Responsibility</h3>
                                 </div>
-                                <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Free Services & Payments</h2>
+                                <p style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.65, margin: 0 }}>You confirm that:</p>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                    {[
+                                        "You have the right to upload and process any document submitted",
+                                        "The content does not breach any laws or third-party rights",
+                                    ].map((item) => (
+                                        <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                                            {checkIcon}
+                                            <span style={{ fontSize: "0.88rem", color: "#475569", lineHeight: 1.6 }}>{item}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                            <p style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                                We may offer a free summary followed by optional paid services, such as a more detailed breakdown. Pricing will be
-                                displayed clearly before payment is requested.
-                            </p>
-                            <p style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                                Where paid services are offered, payment must be completed before access to those services is provided. Payment
-                                processing may be carried out by secure third-party providers.
-                            </p>
                         </div>
 
-                        {/* Section 4: Acceptable Use */}
-                        <div className="policy-card animate-fade-up" style={{ animationDelay: "400ms" }}>
+                        {/* Acceptable Use */}
+                        <div className="policy-card animate-fade-up" style={{ animationDelay: "250ms" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                                 <div
                                     style={{
@@ -269,52 +279,97 @@ export default function TermsOfServicePage() {
                                 <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Acceptable Use</h2>
                             </div>
                             <p style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                                You must <strong>not</strong>:
+                                You must <strong>NOT</strong>:
                             </p>
                             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 4 }}>
                                 {[
                                     "Upload unlawful, harmful, or fraudulent material",
-                                    "Attempt to disrupt, reverse engineer, or misuse the service",
-                                    "Use the platform in a way that breaches the rights of others",
-                                ].map((item, idx) => (
-                                    <div key={idx} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                                        <div
-                                            style={{
-                                                width: 20,
-                                                height: 20,
-                                                borderRadius: "50%",
-                                                background: "rgba(18,161,166,0.15)",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                flexShrink: 0,
-                                                marginTop: 2,
-                                            }}
-                                        >
-                                            <svg
-                                                width="12"
-                                                height="12"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="#12A1A6"
-                                                strokeWidth="3"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                            >
-                                                <path d="M20 6L9 17l-5-5" />
-                                            </svg>
-                                        </div>
+                                    "Attempt to disrupt, reverse engineer, or exploit the system",
+                                    "Access or use the service beyond its intended purpose",
+                                ].map((item) => (
+                                    <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                                        {checkIcon}
                                         <span style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.6 }}>{item}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Section 5: Liability & Changes (Side-by-side) */}
+                        {/* Free Services & Payments */}
+                        <div className="policy-card animate-fade-up" style={{ animationDelay: "325ms" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                                <div
+                                    style={{
+                                        width: 48,
+                                        height: 48,
+                                        borderRadius: 14,
+                                        background: "linear-gradient(135deg,rgba(18,161,166,0.12),rgba(84,214,212,0.12))",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    <svg
+                                        width="24"
+                                        height="24"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="#12A1A6"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    >
+                                        <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                    </svg>
+                                </div>
+                                <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Free Services & Payments</h2>
+                            </div>
+                            <p style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7, margin: 0 }}>We may offer:</p>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 4 }}>
+                                {["A free summary", "Optional paid services (e.g. full breakdowns)"].map((item) => (
+                                    <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                                        {checkIcon}
+                                        <span style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.6 }}>{item}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <p style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7, margin: 0 }}>
+                                Pricing will always be shown before payment. Paid services are only delivered after successful payment via secure
+                                third-party providers.
+                            </p>
+                        </div>
+
+                        {/* Third-Party Services + Limitation of Liability + Changes */}
                         <div
                             className="animate-fade-up"
-                            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 24, animationDelay: "500ms" }}
+                            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 24, animationDelay: "400ms" }}
                         >
+                            <div className="policy-card" style={{ gap: 12 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                                    <svg
+                                        width="20"
+                                        height="20"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="#12A1A6"
+                                        strokeWidth="2.5"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    >
+                                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                                        <line x1="6" y1="6" x2="6.01" y2="6" />
+                                        <line x1="6" y1="18" x2="6.01" y2="18" />
+                                    </svg>
+                                    <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Third-Party Services</h3>
+                                </div>
+                                <p style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.65, margin: 0 }}>
+                                    We may use trusted third-party services, including AI systems, hosting providers, and payment processors. By using
+                                    the service, you agree to this processing where necessary to deliver the service.
+                                </p>
+                            </div>
+
                             <div className="policy-card" style={{ gap: 12 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                                     <svg
@@ -332,8 +387,8 @@ export default function TermsOfServicePage() {
                                     <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Limitation of Liability</h3>
                                 </div>
                                 <p style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.65, margin: 0 }}>
-                                    To the fullest extent permitted by law, Explain My Letter is not liable for losses arising from reliance on
-                                    simplified outputs or from circumstances outside our reasonable control.
+                                    To the fullest extent permitted by law, Explain My Letter is not liable for decisions made based on outputs,
+                                    losses arising from reliance on simplified explanations, or events outside our reasonable control.
                                 </p>
                             </div>
 
@@ -354,64 +409,16 @@ export default function TermsOfServicePage() {
                                     <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Changes to the Service</h3>
                                 </div>
                                 <p style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.65, margin: 0 }}>
-                                    We may update, modify, pause, or improve parts of the service from time to time, including pricing, features, and
-                                    these terms.
+                                    We may update or modify features, pricing, and these terms. Continued use of the service constitutes acceptance of
+                                    any updates.
                                 </p>
                             </div>
                         </div>
-                        {/* Section 6: Third Party Services */}
+
+                        {/* Contact */}
                         <div
                             className="policy-card animate-fade-up"
-                            style={{
-                                animationDelay: "700ms",
-                                background: "linear-gradient(135deg,#f0fdfd,#e6faf9)",
-                                borderColor: "#b2eeec",
-                                marginTop: "24px",
-                            }}
-                        >
-                            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
-                                <div
-                                    style={{
-                                        width: 48,
-                                        height: 48,
-                                        borderRadius: 14,
-                                        background: "#fff",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        flexShrink: 0,
-                                        boxShadow: "0 4px 12px rgba(18,161,166,0.15)",
-                                    }}
-                                >
-                                    {/* Server / Data Icon */}
-                                    <svg
-                                        width="24"
-                                        height="24"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="#12A1A6"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    >
-                                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-                                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-                                        <line x1="6" y1="6" x2="6.01" y2="6" />
-                                        <line x1="6" y1="18" x2="6.01" y2="18" />
-                                    </svg>
-                                </div>
-                                <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Third Party Services</h2>
-                            </div>
-                            <p style={{ fontSize: "0.95rem", color: "#0e4f52", lineHeight: 1.7, margin: 0 }}>
-                                We may use AI tools (such as ChatGPT) to process information you provide. Your data is handled in line with data
-                                protection laws and our privacy practices. Some data may be temporarily processed on secure third-party servers. By
-                                using our service, you consent to this.
-                            </p>
-                        </div>
-                        {/* Section 7: Contact */}
-                        <div
-                            className="policy-card animate-fade-up"
-                            style={{ animationDelay: "600ms", background: "linear-gradient(135deg,#f0fdfd,#e6faf9)", borderColor: "#b2eeec" }}
+                            style={{ animationDelay: "475ms", background: "linear-gradient(135deg,#f0fdfd,#e6faf9)", borderColor: "#b2eeec" }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                                 <div
@@ -443,7 +450,10 @@ export default function TermsOfServicePage() {
                                 <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Contact</h2>
                             </div>
                             <p style={{ fontSize: "0.95rem", color: "#0e4f52", lineHeight: 1.7, margin: 0 }}>
-                                For questions about these terms, please contact our support team.
+                                For questions about these terms, please contact our support team at{" "}
+                                <a href="mailto:info@explainmyletter.co.uk" style={{ color: "#12A1A6", fontWeight: 700, textDecoration: "none" }}>
+                                    info@explainmyletter.co.uk
+                                </a>
                             </p>
                             <div style={{ marginTop: 8 }}>
                                 <Link
@@ -479,20 +489,18 @@ export default function TermsOfServicePage() {
                                 </span>
                             </div>
                         </div>
-                        {/* Section 7; Third Party */}
-                        {/* We may use AI tools (such as ChatGPT) to process information you provide. Your data is handled in line with data protection laws and our privacy practices. Some data may be temporarily processed on secure third-party servers. By using our service, you consent to this. */}
                     </div>
                 </div>
             </div>
 
-            {/* Integrated CTA Banner at the bottom */}
+            {/* CTA Banner */}
             <section
                 className="hero-mesh animate-fade-up"
                 style={{
                     padding: "80px 24px",
                     textAlign: "center",
                     background: "linear-gradient(135deg, #0F233F, #1a3a5c)",
-                    animationDelay: "700ms",
+                    animationDelay: "550ms",
                 }}
             >
                 <div style={{ maxWidth: 600, margin: "0 auto", position: "relative", zIndex: 1 }}>
@@ -533,15 +541,7 @@ export default function TermsOfServicePage() {
                             }}
                         >
                             Upload your Letter Free
-                            <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                style={{ transition: "transform 0.2s" }}
-                            >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                             </svg>
                         </button>
