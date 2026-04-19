@@ -8,55 +8,57 @@
 //   • Cannot generate paid content for unpaid jobs
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/db";
-import { Job } from "@/models/Job";
-import { JobPayment } from "@/models/JobPayment";
-import { Setting } from "@/models/Setting";
-import { RegenerationLog } from "@/models/RegenerationLog";
-import Temp from "@/models/Temp";
+import prisma from "@/lib/prisma";
+import { JobState, PaymentStatus, RegenerationStatus } from "@prisma/client";
 import { generatePaidBreakdown } from "@/app/api/generate-paid/paidService";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        await dbConnect();
         const { id } = await params;
 
         // ── 1. Identify the admin triggering the action ──
-        // Read from session cookie set by your admin auth middleware.
-        // Falls back to "unknown_admin" if the session can't be parsed —
-        // still logs the attempt so there's always an audit trail.
         const adminId = req.cookies.get("admin_session")?.value ?? "unknown_admin";
 
         // ── 2. Load job ──
-        const job = await Job.findById(id).lean<any>();
+        const job = await prisma.job.findUnique({ 
+            where: { id } 
+        });
+        
         if (!job) {
             return NextResponse.json({ error: "Job not found." }, { status: 404 });
         }
 
         // ── 3. Must be FAILED ──
-        if (job.status !== "FAILED") {
+        if (job.status !== JobState.FAILED) {
             return NextResponse.json({ error: `Regenerate is only available for FAILED jobs. Current status: ${job.status}` }, { status: 409 });
         }
 
         // ── 4. Must have confirmed payment ──
-        const payment = await JobPayment.findOne({ job_id: id, status: "completed" }).lean<any>();
+        const payment = await prisma.jobPayment.findFirst({ 
+            where: { 
+                job_id: id, 
+                status: PaymentStatus.completed 
+            } 
+        });
+        
         if (!payment && !job.stripe_payment_intent_id) {
             return NextResponse.json({ error: "Cannot regenerate — no confirmed payment on record for this job." }, { status: 403 });
         }
 
         // ── 5. Check max regeneration attempts ──
-        const maxAttemptSetting = await Setting.findOne({ key: "max_regeneration_attempts" }).lean<{ value: number }>();
-        const maxAttempts = maxAttemptSetting?.value ?? DEFAULT_MAX_ATTEMPTS;
+        // Fetch setting and previous attempts concurrently
+        const [maxAttemptSetting, previousAttempts] = await Promise.all([
+            prisma.setting.findUnique({ where: { key: "max_regeneration_attempts" } }),
+            prisma.regenerationLog.count({ where: { job_id: id } })
+        ]);
 
-        const previousAttempts = await RegenerationLog.countDocuments({ job_id: id });
+        const maxAttempts = (maxAttemptSetting?.value as number) ?? DEFAULT_MAX_ATTEMPTS;
 
         if (previousAttempts >= maxAttempts) {
             return NextResponse.json(
-                {
-                    error: `Maximum regeneration attempts reached (${maxAttempts}). Adjust the limit in Settings or contact support.`,
-                },
+                { error: `Maximum regeneration attempts reached (${maxAttempts}). Adjust the limit in Settings or contact support.` },
                 { status: 429 },
             );
         }
@@ -64,44 +66,53 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const attemptNumber = previousAttempts + 1;
 
         // ── 6. Log the attempt BEFORE triggering (so it's always recorded) ──
-        const logEntry = await RegenerationLog.create({
-            job_id: id,
-            triggered_by_admin_id: adminId,
-            attempt_number: attemptNumber,
-            status: "triggered",
-            created_at: new Date(),
+        const logEntry = await prisma.regenerationLog.create({
+            data: {
+                job_id: id,
+                triggered_by_admin_id: adminId,
+                attempt_number: attemptNumber,
+                status: RegenerationStatus.triggered,
+            }
         });
 
         // ── 7. Recover extracted text from Temp collection ──
-        // The Temp document may have been deleted after the original paid generation
-        // attempt. If it's gone, the admin cannot regenerate without the user
-        // re-uploading the document.
-        const tempDoc = await Temp.findOne({ job_id: String(id) }).lean<any>();
+        const tempDoc = await prisma.temp.findUnique({ 
+            where: { job_id: id } 
+        });
+        
         if (!tempDoc?.extracted_text) {
-            await RegenerationLog.findByIdAndUpdate(logEntry._id, { status: "failed" });
+            await prisma.regenerationLog.update({
+                where: { id: logEntry.id },
+                data: { status: RegenerationStatus.failed }
+            });
             return NextResponse.json(
-                {
-                    error: "Extracted document text is no longer available (Temp record expired). The user will need to re-upload the document to generate a new breakdown.",
-                },
+                { error: "Extracted document text is no longer available (Temp record expired). The user will need to re-upload the document to generate a new breakdown." },
                 { status: 410 },
             );
         }
 
         // ── 8. Reset job to PAYMENT_CONFIRMED so generatePaidBreakdown accepts it ──
-        await Job.findByIdAndUpdate(id, {
-            status: "PAYMENT_CONFIRMED",
-            previous_state: "FAILED",
-            state_transitioned_at: new Date(),
+        await prisma.job.update({
+            where: { id },
+            data: {
+                status: JobState.PAYMENT_CONFIRMED,
+                previous_state: JobState.FAILED,
+                state_transitioned_at: new Date(),
+            }
         });
 
         // ── 9. Re-trigger paid AI generation with original parameters ──
-        const upsells: string[] = payment?.upsells_purchased ?? job.upsells_purchased ?? [];
+        // Prisma uses native string arrays, so we can pass it directly
+        const upsells: string[] = payment?.upsells_purchased?.length ? payment.upsells_purchased : job.upsells_purchased;
 
         try {
             await generatePaidBreakdown(id, tempDoc.extracted_text, upsells);
 
             // Log success
-            await RegenerationLog.findByIdAndUpdate(logEntry._id, { status: "completed" });
+            await prisma.regenerationLog.update({
+                where: { id: logEntry.id },
+                data: { status: RegenerationStatus.completed }
+            });
 
             return NextResponse.json({
                 success: true,
@@ -110,7 +121,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             });
         } catch (genError: any) {
             // generatePaidBreakdown sets job status to FAILED on error — log it
-            await RegenerationLog.findByIdAndUpdate(logEntry._id, { status: "failed" });
+            await prisma.regenerationLog.update({
+                where: { id: logEntry.id },
+                data: { status: RegenerationStatus.failed }
+            });
 
             return NextResponse.json({ error: `Regeneration failed: ${genError.message}` }, { status: 502 });
         }
@@ -124,17 +138,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        await dbConnect();
         const { id } = await params;
 
-        const maxAttemptSetting = await Setting.findOne({ key: "max_regeneration_attempts" }).lean<{ value: number }>();
-        const maxAttempts = maxAttemptSetting?.value ?? DEFAULT_MAX_ATTEMPTS;
+        // Fetch logs and settings in parallel
+        const [maxAttemptSetting, logs] = await Promise.all([
+            prisma.setting.findUnique({ where: { key: "max_regeneration_attempts" } }),
+            prisma.regenerationLog.findMany({
+                where: { job_id: id },
+                orderBy: { created_at: 'desc' }
+            })
+        ]);
 
-        const logs = await RegenerationLog.find({ job_id: id }).sort({ created_at: -1 }).lean<any[]>();
+        const maxAttempts = (maxAttemptSetting?.value as number) ?? DEFAULT_MAX_ATTEMPTS;
 
         return NextResponse.json({
             logs: logs.map((l) => ({
-                id: l._id.toString(),
+                id: l.id,
                 attemptNumber: l.attempt_number,
                 triggeredBy: l.triggered_by_admin_id,
                 status: l.status,
