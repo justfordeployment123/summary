@@ -10,9 +10,28 @@ export default function DataDeletionPolicyPage() {
         router.push("/#upload-section");
     };
 
+    const checkIcon = (
+        <div
+            style={{
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                background: "rgba(18,161,166,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                marginTop: 2,
+            }}
+        >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#12A1A6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+            </svg>
+        </div>
+    );
+
     return (
         <div style={{ minHeight: "calc(100vh - 66px)", background: "#f8fafc", display: "flex", flexDirection: "column" }}>
-            {/* Custom keyframes and card styles */}
             <style>{`
                 @keyframes fadeUp {
                     from { opacity: 0; transform: translateY(20px); }
@@ -39,7 +58,6 @@ export default function DataDeletionPolicyPage() {
                 }
             `}</style>
 
-            {/* Main Content Area */}
             <div style={{ flex: 1, padding: "60px 24px 80px" }}>
                 <div style={{ maxWidth: 860, margin: "0 auto" }}>
                     {/* Page Header */}
@@ -74,25 +92,14 @@ export default function DataDeletionPolicyPage() {
                         >
                             Data Deletion Policy
                         </h1>
-                        <p
-                            style={{
-                                fontSize: "1.1rem",
-                                color: "#64748b",
-                                marginTop: 16,
-                                maxWidth: 600,
-                                margin: "16px auto 0",
-                                lineHeight: 1.6,
-                            }}
-                        >
-                            We believe sensitive documents should be handled carefully and kept only for as long as necessary. Our approach is built
-                            around data minimisation and automatic deletion.
+                        <p style={{ fontSize: "1.1rem", color: "#64748b", marginTop: 16, maxWidth: 600, margin: "16px auto 0", lineHeight: 1.6 }}>
+                            We believe sensitive documents should be handled carefully and kept only for as long as necessary.
                         </p>
                     </div>
 
-                    {/* Policy Grid */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-                        {/* Card 1 */}
-                        <div className="policy-card animate-fade-up" style={{ animationDelay: "150ms" }}>
+                        {/* Our Approach */}
+                        <div className="policy-card animate-fade-up" style={{ animationDelay: "100ms" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                                 <div
                                     style={{
@@ -119,16 +126,87 @@ export default function DataDeletionPolicyPage() {
                                         <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                     </svg>
                                 </div>
-                                <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Our Deletion Principle</h2>
+                                <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Our Approach</h2>
                             </div>
                             <p style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                                Explain My Letter is designed to minimise document retention. Uploaded files are used only for the purpose of
-                                generating the requested output and are not stored longer than needed for that purpose.
+                                Explain My Letter follows a strict data minimisation principle. Documents are used only to generate the requested
+                                output and are not retained longer than necessary.
                             </p>
                         </div>
 
-                        {/* Card 2 */}
-                        <div className="policy-card animate-fade-up" style={{ animationDelay: "300ms" }}>
+                        {/* Automatic Deletion + Limited Retention side by side */}
+                        <div
+                            className="animate-fade-up"
+                            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 24, animationDelay: "175ms" }}
+                        >
+                            <div className="policy-card" style={{ gap: 12 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                                    <svg
+                                        width="20"
+                                        height="20"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="#12A1A6"
+                                        strokeWidth="2.5"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    >
+                                        <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Automatic Deletion</h3>
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                    {[
+                                        "Uploaded documents are automatically deleted after processing",
+                                        "All documents are removed within 24 hours",
+                                    ].map((item) => (
+                                        <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                                            {checkIcon}
+                                            <span style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.6 }}>{item}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="policy-card" style={{ gap: 12 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                                    <svg
+                                        width="20"
+                                        height="20"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="#12A1A6"
+                                        strokeWidth="2.5"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    >
+                                        <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Limited Retention</h3>
+                                </div>
+                                <p style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.65, margin: 0 }}>
+                                    We may retain minimal data in limited circumstances, including:
+                                </p>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                    {[
+                                        "System logs for security and fraud prevention",
+                                        "Billing or transaction records",
+                                        "Legal or regulatory obligations",
+                                    ].map((item) => (
+                                        <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                                            {checkIcon}
+                                            <span style={{ fontSize: "0.9rem", color: "#475569", lineHeight: 1.6 }}>{item}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p style={{ fontSize: "0.88rem", color: "#64748b", lineHeight: 1.6, margin: 0 }}>
+                                    This data is minimised, securely stored, and automatically cleared within appropriate timeframes.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Security Commitment */}
+                        <div className="policy-card animate-fade-up" style={{ animationDelay: "250ms" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                                 <div
                                     style={{
@@ -152,21 +230,20 @@ export default function DataDeletionPolicyPage() {
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
                                     >
-                                        <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                     </svg>
                                 </div>
-                                <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Automatic Deletion</h2>
+                                <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>Security Commitment</h2>
                             </div>
                             <p style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                                Documents uploaded through the platform are automatically deleted after processing <strong>(within 24 hours)</strong>{" "}
-                                in accordance with our strict operational controls.
+                                We use secure infrastructure and restricted access controls to ensure data is handled safely at every stage.
                             </p>
                         </div>
 
-                        {/* Card 3 (Contact) */}
+                        {/* User Requests */}
                         <div
                             className="policy-card animate-fade-up"
-                            style={{ animationDelay: "450ms", background: "linear-gradient(135deg,#f0fdfd,#e6faf9)", borderColor: "#b2eeec" }}
+                            style={{ animationDelay: "325ms", background: "linear-gradient(135deg,#f0fdfd,#e6faf9)", borderColor: "#b2eeec" }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                                 <div
@@ -198,8 +275,10 @@ export default function DataDeletionPolicyPage() {
                                 <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0F233F", margin: 0 }}>User Requests</h2>
                             </div>
                             <p style={{ fontSize: "0.95rem", color: "#0e4f52", lineHeight: 1.7, margin: 0 }}>
-                                If you would like confirmation relating to data handling, or have deletion-related requests, please reach out to our
-                                support team.
+                                You may request deletion of your data at any time by contacting:{" "}
+                                <a href="mailto:info@explainmyletter.co.uk" style={{ color: "#12A1A6", fontWeight: 700, textDecoration: "none" }}>
+                                    info@explainmyletter.co.uk
+                                </a>
                             </p>
                             <div style={{ marginTop: 8 }}>
                                 <Link
@@ -239,14 +318,14 @@ export default function DataDeletionPolicyPage() {
                 </div>
             </div>
 
-            {/* Integrated CTA Banner at the bottom */}
+            {/* CTA Banner */}
             <section
                 className="hero-mesh animate-fade-up"
                 style={{
                     padding: "80px 24px",
                     textAlign: "center",
                     background: "linear-gradient(135deg, #0F233F, #1a3a5c)",
-                    animationDelay: "600ms",
+                    animationDelay: "400ms",
                 }}
             >
                 <div style={{ maxWidth: 600, margin: "0 auto", position: "relative", zIndex: 1 }}>
@@ -287,15 +366,7 @@ export default function DataDeletionPolicyPage() {
                             }}
                         >
                             Upload your Letter Free
-                            <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                style={{ transition: "transform 0.2s" }}
-                            >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                             </svg>
                         </button>
