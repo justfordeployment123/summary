@@ -53,6 +53,51 @@ export function CompletedView({ summaryData, completedData, handleDownload, hand
     const urgency = summaryData?.urgency && URGENCY_CONFIG[summaryData.urgency] ? URGENCY_CONFIG[summaryData.urgency] : URGENCY_CONFIG["Routine"];
     const [feedbackOpen, setFeedbackOpen] = useState(false);
 
+    const handleDownloadInternal = async (fmt: string) => {
+        if (!summaryData || !completedData?.detailedBreakdown) return;
+
+        try {
+            // Change button state to "Downloading..." here if you have a loading state
+
+            const response = await fetch(`/api/download/${fmt}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    job_id: summaryData.jobId,
+                    token: summaryData.accessToken,
+                    breakdownText: completedData.detailedBreakdown, // Pass the text directly!
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Failed to download document");
+            }
+
+            // Convert the response to a Blob (raw file data)
+            const blob = await response.blob();
+
+            // Create a temporary URL for the Blob
+            const url = window.URL.createObjectURL(blob);
+
+            // Create a hidden anchor tag to trigger the download
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `breakdown_${completedData.referenceId || "export"}.${fmt}`;
+            document.body.appendChild(a);
+            a.click();
+
+            // Clean up the DOM and memory
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error("Download error:", error);
+            alert(error instanceof Error ? error.message : "Failed to download. Please try again.");
+        }
+    };
+
     return (
         <div
             style={{
@@ -164,7 +209,7 @@ export function CompletedView({ summaryData, completedData, handleDownload, hand
                     {(["pdf", "docx", "txt"] as const).map((fmt) => (
                         <button
                             key={fmt}
-                            onClick={() => handleDownload(fmt)}
+                            onClick={() => handleDownloadInternal(fmt)}
                             style={{
                                 background: "#fff",
                                 border: "2px solid #e2e8f0",

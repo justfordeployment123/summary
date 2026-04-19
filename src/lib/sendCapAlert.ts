@@ -11,7 +11,7 @@
 // Fails silently — never throws — so it can never break the main generation flow.
 
 import nodemailer from "nodemailer";
-import { Setting } from "@/models/Setting";
+import prisma from "@/lib/prisma";
 
 export interface CapAlertOptions {
     usedTokens: number;
@@ -23,14 +23,19 @@ export interface CapAlertOptions {
 /**
  * Reads the alert email from DB then sends a usage alert.
  * Returns immediately (no-op) if:
- *   - No email is configured in DB
- *   - SMTP env vars are missing
+ * - No email is configured in DB
+ * - SMTP env vars are missing
  * Never throws — all errors are caught and logged.
  */
 export async function maybeSendCapAlert(opts: CapAlertOptions): Promise<void> {
     try {
-        const emailSetting = await Setting.findOne({ key: "openai_alert_email" }).lean<{ value: string }>();
-        const alertEmail = emailSetting?.value?.trim() ?? "";
+        // Fetch the setting using Prisma
+        const emailSetting = await prisma.setting.findUnique({ 
+            where: { key: "openai_alert_email" } 
+        });
+        
+        // Safely cast the Prisma Json value to a string
+        const alertEmail = (emailSetting?.value as string)?.trim() ?? "";
 
         if (!alertEmail) return;
 
@@ -62,7 +67,7 @@ export async function maybeSendCapAlert(opts: CapAlertOptions): Promise<void> {
         const subjectPrefix = isCapReached ? "🚨 Monthly Cap REACHED" : `⚠️ Usage Alert — ${percentRounded}%`;
 
         await transporter.sendMail({
-            from: `"LetterDecoder Admin" <${from}>`,
+            from: `"Explain My Letter Admin" <${from}>`,
             to: alertEmail,
             subject: `${subjectPrefix} of OpenAI Monthly Cap`,
             html: `
