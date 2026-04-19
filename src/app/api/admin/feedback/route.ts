@@ -315,7 +315,7 @@ export async function GET(req: NextRequest) {
             });
         }
 
-        // ── JSON paginated response (run in parallel via $transaction) ─────────
+       // ── JSON paginated response (run in parallel via $transaction) ─────────
         const [total, surveys] = await prisma.$transaction([
             prisma.feedbackSurvey.count({ where }),
             prisma.feedbackSurvey.findMany({
@@ -326,8 +326,14 @@ export async function GET(req: NextRequest) {
             }),
         ]);
 
+        // MAPPING FIX: Append _id so frontend admin tables don't break
+        const mappedSurveys = surveys.map((survey) => ({
+            ...survey,
+            _id: survey.id
+        }));
+
         return NextResponse.json({
-            surveys,
+            surveys: mappedSurveys,
             pagination: {
                 total,
                 page,
