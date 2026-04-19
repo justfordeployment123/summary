@@ -7,22 +7,19 @@
 // GET  — preview how many records would be deleted
 // POST — run the cleanup
 
-import { NextRequest, NextResponse } from "next/server";
-import connectToDatabase from "@/lib/db";
-import { Job } from "@/models/Job";
-import { JobPayment } from "@/models/JobPayment";
-import { JobToken } from "@/models/JobToken";
-import { Setting } from "@/models/Setting";
-import WebhookEvent from "@/models/WebhookEvent";
+import { NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
 
 const DEFAULT_RETENTION_DAYS = 365;
 
 async function getRetentionDays(): Promise<number> {
     try {
-        const setting = await Setting.findOne({ key: "job_metadata_retention_days" }).lean<{ value: number }>();
-        return typeof setting?.value === "number" && setting.value > 0
-            ? setting.value
-            : DEFAULT_RETENTION_DAYS;
+        const setting = await prisma.setting.findUnique({ 
+            where: { key: "job_metadata_retention_days" } 
+        });
+        
+        const val = setting?.value as number;
+        return typeof val === "number" && val > 0 ? val : DEFAULT_RETENTION_DAYS;
     } catch {
         return DEFAULT_RETENTION_DAYS;
     }
@@ -38,12 +35,12 @@ function getCutoffDate(days: number): Date {
 
 export async function GET() {
     try {
-        await connectToDatabase();
-
         const retentionDays = await getRetentionDays();
         const cutoff = getCutoffDate(retentionDays);
 
-        const expiredJobCount = await Job.countDocuments({ created_at: { $lt: cutoff } });
+        const expiredJobCount = await prisma.job.count({ 
+            where: { created_at: { lt: cutoff } } 
+        });
 
         return NextResponse.json({
             retentionDays,
@@ -60,18 +57,16 @@ export async function GET() {
 
 export async function POST() {
     try {
-        await connectToDatabase();
-
         const retentionDays = await getRetentionDays();
         const cutoff = getCutoffDate(retentionDays);
 
-        // Find expired job IDs first for cascading deletes
-        const expiredJobs = await Job.find(
-            { created_at: { $lt: cutoff } },
-            { _id: 1 },
-        ).lean<{ _id: any }[]>();
+        // Find expired job IDs first so we can target their relations
+        const expiredJobs = await prisma.job.findMany({
+            where: { created_at: { lt: cutoff } },
+            select: { id: true },
+        });
 
-        const expiredJobIds = expiredJobs.map((j) => j._id);
+        const expiredJobIds = expiredJobs.map((j) => j.id);
 
         if (expiredJobIds.length === 0) {
             return NextResponse.json({
@@ -88,23 +83,23 @@ export async function POST() {
             });
         }
 
-        // Delete jobs + all associated records in parallel
-        const [jobsDeleted, paymentsDeleted, tokenLogsDeleted, webhookLogsDeleted] =
-            await Promise.all([
-                Job.deleteMany({ _id: { $in: expiredJobIds } }).then((r) => r.deletedCount),
-                JobPayment.deleteMany({ job_id: { $in: expiredJobIds } }).then((r) => r.deletedCount),
-                JobToken.deleteMany({ job_id: { $in: expiredJobIds } }).then((r) => r.deletedCount),
-                WebhookEvent.deleteMany({ job_id: { $in: expiredJobIds } }).then((r) => r.deletedCount),
-            ]);
+        // Delete relations explicitly via Transaction to get the exact counts for the frontend.
+        // Order matters: delete child relations first, then the parent Job.
+        const [payments, tokens, webhooks, jobs] = await prisma.$transaction([
+            prisma.jobPayment.deleteMany({ where: { job_id: { in: expiredJobIds } } }),
+            prisma.jobToken.deleteMany({ where: { job_id: { in: expiredJobIds } } }),
+            prisma.webhookEvent.deleteMany({ where: { job_id: { in: expiredJobIds } } }),
+            prisma.job.deleteMany({ where: { id: { in: expiredJobIds } } })
+        ]);
 
         const result = {
             ranAt: new Date().toISOString(),
             retentionDays,
             cutoffDate: cutoff.toISOString(),
-            jobsDeleted,
-            paymentsDeleted,
-            tokenLogsDeleted,
-            webhookLogsDeleted,
+            jobsDeleted: jobs.count,
+            paymentsDeleted: payments.count,
+            tokenLogsDeleted: tokens.count,
+            webhookLogsDeleted: webhooks.count,
         };
 
         console.log("[cleanup] Complete:", result);
