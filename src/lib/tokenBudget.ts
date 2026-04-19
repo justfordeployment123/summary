@@ -8,8 +8,7 @@
 //   • Monthly usage resets on 1st of each calendar month (automatic via key naming)
 //   • Admin dashboard flag when cap reached (key: "monthly_cap_reached")
 
-import dbConnect from "@/lib/db";
-import { Setting } from "@/models/Setting";
+import prisma from "@/lib/prisma";
 
 const DEFAULT_MONTHLY_CAP = 10_000_000; // 10M tokens — configurable
 const DEFAULT_ALERT_THRESHOLD = 80; // percent
@@ -40,29 +39,33 @@ export interface CapResult {
  * Returns { allowed: false } if cap is reached — caller should reject the request.
  */
 export async function checkAndIncrementMonthlyUsage(tokensUsed: number): Promise<CapResult> {
-    await dbConnect();
-
     const monthKey = getCurrentMonthKey();
 
+    // Fetch all three settings concurrently
     const [capSetting, usageSetting, thresholdSetting] = await Promise.all([
-        Setting.findOne({ key: "openai_monthly_token_cap" }).lean<any>(),
-        Setting.findOne({ key: monthKey }).lean<any>(),
-        Setting.findOne({ key: "openai_alert_threshold_percent" }).lean<any>(),
+        prisma.setting.findUnique({ where: { key: "openai_monthly_token_cap" } }),
+        prisma.setting.findUnique({ where: { key: monthKey } }),
+        prisma.setting.findUnique({ where: { key: "openai_alert_threshold_percent" } }),
     ]);
 
-    const cap: number = capSetting?.value ?? DEFAULT_MONTHLY_CAP;
-    const currentUsage: number = usageSetting?.value ?? 0;
-    const alertThreshold: number = thresholdSetting?.value ?? DEFAULT_ALERT_THRESHOLD;
+    // Safely cast Prisma JSON values to numbers, falling back to defaults
+    const cap: number = (capSetting?.value as number) ?? DEFAULT_MONTHLY_CAP;
+    const currentUsage: number = (usageSetting?.value as number) ?? 0;
+    const alertThreshold: number = (thresholdSetting?.value as number) ?? DEFAULT_ALERT_THRESHOLD;
 
     const percentUsed = (currentUsage / cap) * 100;
 
     // ── Cap already reached before this request ──
     if (currentUsage >= cap) {
-        await Setting.findOneAndUpdate(
-            { key: "monthly_cap_reached" },
-            { value: true, description: "Set automatically when monthly cap is reached." },
-            { upsert: true },
-        );
+        await prisma.setting.upsert({
+            where: { key: "monthly_cap_reached" },
+            update: { value: true },
+            create: { 
+                key: "monthly_cap_reached", 
+                value: true, 
+                description: "Set automatically when monthly cap is reached." 
+            },
+        });
         return { allowed: false, currentUsage, cap, percentUsed, aboveThreshold: true };
     }
 
@@ -75,13 +78,29 @@ export async function checkAndIncrementMonthlyUsage(tokensUsed: number): Promise
         newUsage = currentUsage + tokensUsed;
         newPercent = (newUsage / cap) * 100;
 
-        await Setting.findOneAndUpdate({ key: monthKey }, { value: newUsage, description: `Monthly token usage for ${monthKey}` }, { upsert: true });
+        await prisma.setting.upsert({
+            where: { key: monthKey },
+            update: { value: newUsage },
+            create: { 
+                key: monthKey, 
+                value: newUsage, 
+                description: `Monthly token usage for ${monthKey}` 
+            },
+        });
 
         aboveThreshold = newPercent >= alertThreshold;
 
         // ── Cap just reached ──
         if (newUsage >= cap) {
-            await Setting.findOneAndUpdate({ key: "monthly_cap_reached" }, { value: true }, { upsert: true });
+            await prisma.setting.upsert({
+                where: { key: "monthly_cap_reached" },
+                update: { value: true },
+                create: { 
+                    key: "monthly_cap_reached", 
+                    value: true, 
+                    description: "Set automatically when monthly cap is reached." 
+                },
+            });
         }
     }
 
@@ -99,10 +118,28 @@ export async function checkAndIncrementMonthlyUsage(tokensUsed: number): Promise
  * The automatic reset happens naturally because the key includes the month/year.
  */
 export async function resetMonthlyUsage(): Promise<void> {
-    await dbConnect();
     const monthKey = getCurrentMonthKey();
+    
+    // Execute both resets concurrently using Promise.all 
+    // (We could use $transaction, but since they don't depend on each other, this is slightly faster)
     await Promise.all([
-        Setting.findOneAndUpdate({ key: monthKey }, { value: 0 }, { upsert: true }),
-        Setting.findOneAndUpdate({ key: "monthly_cap_reached" }, { value: false }, { upsert: true }),
+        prisma.setting.upsert({
+            where: { key: monthKey },
+            update: { value: 0 },
+            create: { 
+                key: monthKey, 
+                value: 0, 
+                description: `Monthly token usage for ${monthKey}` 
+            },
+        }),
+        prisma.setting.upsert({
+            where: { key: "monthly_cap_reached" },
+            update: { value: false },
+            create: { 
+                key: "monthly_cap_reached", 
+                value: false, 
+                description: "Set automatically when monthly cap is reached." 
+            },
+        }),
     ]);
 }

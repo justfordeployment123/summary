@@ -1,19 +1,3 @@
-// src/app/api/generate-paid/route.ts
-//
-// CRITICAL: This route must ONLY be called by the internal Stripe webhook handler.
-// It must NEVER be called directly from client-side code (§7.2).
-//
-// Requirement constraints (§8, §9, §10):
-//   • Payment lock: job must be in PAYMENT_CONFIRMED state
-//   • Category-specific paid prompt fetched from DB (§10.2) — falls back to hardcoded default
-//   • Token caps: configurable max input/output tokens (from Settings)
-//   • 1,200-word hard cap on input text
-//   • 3 retries with 2s/5s backoff
-//   • AI output validation
-//   • Token usage & cost logging
-//   • Global monthly cap check
-//   • Alert email sent on every request when usage is at or above threshold
-//   • OpenAI model read from Settings DB (openai_model key) — falls back to gpt-4o
 
 import OpenAI from "openai";
 import connectToDatabase from "@/lib/db";
@@ -320,16 +304,6 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
         });
         throw lastError;
     }
-
-    // ── 11. Transition to COMPLETED ──
-    // await Job.findByIdAndUpdate(jobId, {
-    //     status: "COMPLETED",
-    //     previous_state: "PAID_BREAKDOWN_GENERATING",
-    //     state_transitioned_at: new Date(),
-    //     processed_at: new Date(),
-    //     paid_summary: detailedBreakdown,
-    //     urgency,
-    // });
     // ── 11. Transition to COMPLETED ──
     await Promise.all([
         Job.findByIdAndUpdate(jobId, {
