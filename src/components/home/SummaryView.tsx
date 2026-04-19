@@ -1,7 +1,7 @@
 "use client";
 
 import { Elements } from "@stripe/react-stripe-js";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Spinner, CheckIcon } from "@/components/home/primitives";
 import { UpsellCard } from "@/components/home/cards";
@@ -82,6 +82,16 @@ export function SummaryView({
     const [feedbackOpen, setFeedbackOpen] = useState(false);
     const [disclaimerText, setDisclaimerText] = useState<string>();
     const [checkboxLabel, setCheckboxLabel] = useState<string>();
+    const paymentFormRef = useRef<HTMLDivElement>(null);
+
+    // / ← ADD THIS
+    useEffect(() => {
+        if (showPaymentForm && clientSecret && paymentFormRef?.current) {
+            setTimeout(() => {
+                paymentFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 100);
+        }
+    }, [showPaymentForm, clientSecret]);
 
     useEffect(() => {
         const fetchDisclaimerText = async () => {
@@ -585,7 +595,7 @@ export function SummaryView({
 
                     {/* Payment form or CTA */}
                     {showPaymentForm && clientSecret ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                        <div ref={paymentFormRef} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                                 <div style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
                                 <span

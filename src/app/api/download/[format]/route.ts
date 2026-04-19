@@ -299,7 +299,7 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
             doc.on("end", () => resolve(Buffer.concat(chunks)));
             doc.on("error", reject);
 
-            const logoPath = path.join(process.cwd(), "public", "stacked-logo.png");
+            const logoPath = path.join(process.cwd(), "public", "new-logo.png");
             const logoExists = fs.existsSync(logoPath);
 
             const drawPageChrome = () => {
@@ -307,7 +307,7 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
 
                 if (logoExists) {
                     doc.save();
-                    doc.image(logoPath, pageWidth - 110, 20, { width: 60 });
+                    doc.image(logoPath, pageWidth - 110, 20, { width: 100 });
                     doc.restore();
                 }
 
