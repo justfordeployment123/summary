@@ -274,6 +274,7 @@ enum PaymentStatus {
   pending
   completed
   failed
+  refunded
 }
 model JobPayment {
   id                       String        @id @default(uuid())

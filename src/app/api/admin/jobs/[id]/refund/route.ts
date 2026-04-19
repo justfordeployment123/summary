@@ -2,20 +2,30 @@
 
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import dbConnect from "@/lib/db";
-import { Job } from "@/models/Job";
-import { JobPayment } from "@/models/JobPayment";
+import prisma from "@/lib/prisma";
+import { JobState, PaymentStatus } from "@prisma/client";
 
+// Initialize Stripe exactly as you had it
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        await dbConnect();
         const { id } = await params;
 
-        const [job, payment] = await Promise.all([Job.findById(id), JobPayment.findOne({ job_id: id })]);
+        // Fetch the Job and pull its most recent payment in one native query
+        const job = await prisma.job.findUnique({
+            where: { id },
+            include: {
+                payments: {
+                    orderBy: { created_at: 'desc' },
+                    take: 1
+                }
+            }
+        });
 
         if (!job) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+        
+        const payment = job.payments[0];
         if (!payment) return NextResponse.json({ error: "No payment record found for this job." }, { status: 404 });
 
         // Must have a payment intent to refund
@@ -37,23 +47,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             return NextResponse.json({ error: `Stripe refund failed with status: ${refund.status}` }, { status: 500 });
         }
 
-        // Update job status to REFUNDED
-        await Job.findByIdAndUpdate(id, {
-            status: "REFUNDED",
-            previous_state: job.status,
-            state_transitioned_at: new Date(),
-        });
-
-        // Update payment record
-        await JobPayment.findByIdAndUpdate(payment._id, {
-            status: "refunded",
-        });
+        // Execute both database updates safely inside a Transaction
+        await prisma.$transaction([
+            // 1. Update the Job
+            prisma.job.update({
+                where: { id },
+                data: {
+                    status: JobState.REFUNDED,
+                    previous_state: job.status,
+                    state_transitioned_at: new Date(),
+                }
+            }),
+            // 2. Update the Payment Record
+            prisma.jobPayment.update({
+                where: { id: payment.id },
+                data: {
+                    status: PaymentStatus.refunded,
+                }
+            })
+        ]);
 
         return NextResponse.json({
             success: true,
             refundId: refund.id,
             refundStatus: refund.status,
         });
+        
     } catch (error: any) {
         console.error("[refund]", error);
         // Stripe errors have a `type` field — surface the message cleanly
