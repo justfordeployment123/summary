@@ -1,22 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/db";
-import { Setting } from "@/models/Setting";
+import prisma from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
     try {
-        await connectDB();
-        const [disclaimerText, checkboxLabel] = await Promise.all([
-            Setting.findOne({ key: "disclaimer_text" }),
-            Setting.findOne({ key: "disclaimer_checkbox_label" }),
-        ]);
+        // Fetch both settings in a single database query using the 'in' operator
+        const settings = await prisma.setting.findMany({
+            where: {
+                key: {
+                    in: ["disclaimer_text", "disclaimer_checkbox_label"]
+                }
+            }
+        });
 
-        if (!disclaimerText || !checkboxLabel) {
+        // Convert the array of results into a simple key-value dictionary
+        const settingsMap = settings.reduce((acc, setting) => {
+            acc[setting.key] = setting.value;
+            return acc;
+        }, {} as Record<string, any>);
+
+        // Ensure both settings actually exist in the database
+        if (!settingsMap["disclaimer_text"] || !settingsMap["disclaimer_checkbox_label"]) {
             return NextResponse.json({ error: "Disclaimer settings not found" }, { status: 404 });
         }
 
         return NextResponse.json({
-            disclaimer_text: disclaimerText.value,
-            disclaimer_checkbox_label: checkboxLabel.value,
+            disclaimer_text: settingsMap["disclaimer_text"],
+            disclaimer_checkbox_label: settingsMap["disclaimer_checkbox_label"],
         });
     } catch (error) {
         console.error("Error fetching disclaimer:", error);

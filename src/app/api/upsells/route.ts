@@ -1,19 +1,23 @@
-// app/api/upsells/route.ts
+// src/app/api/upsells/route.ts
 import { NextResponse } from "next/server";
-// Adjust the paths to your DB connection and Model
-import connectDB from "@/lib/db";
-import Upsell from "@/models/Upsell";
+import prisma from "@/lib/prisma";
 
 export async function GET() {
     try {
-        await connectDB();
+        // Fetch only active upsells
+        const upsells = await prisma.upsell.findMany({
+            where: {
+                is_active: true,
+            },
+        });
 
-        // Fetch upsells.
-        // We use .lean() to convert Mongoose documents to plain JavaScript objects.
-        // This automatically turns the 'category_prices' Map into a standard Record object.
-        const upsells = await Upsell.find({ is_active: true }).lean();
+        // MAPPING FIX: Append _id so frontend components don't break
+        const mappedUpsells = upsells.map((upsell) => ({
+            ...upsell,
+            _id: upsell.id,
+        }));
 
-        return NextResponse.json({ upsells }, { status: 200 });
+        return NextResponse.json({ upsells: mappedUpsells }, { status: 200 });
     } catch (error: any) {
         console.error("Error fetching upsells:", error);
         return NextResponse.json({ error: "Failed to fetch upsells" }, { status: 500 });
