@@ -1,8 +1,9 @@
+// src/app/api/verify-payment/route.ts
+
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import dbConnect from "@/lib/db";
-import { Job } from "@/models/Job";
-import { JobState } from "@/types/job";
+import prisma from "@/lib/prisma";
+import { JobState } from "@prisma/client";
 import { confirmAndGenerate } from "@/lib/paymentService";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
@@ -10,14 +11,17 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02
 export async function POST(req: Request) {
     try {
         console.log("[verify-payment] Verification request received");
-        await dbConnect();
+
         const { jobId, accessToken, paymentIntentId } = await req.json();
 
         if (!jobId || !accessToken || !paymentIntentId) {
             return NextResponse.json({ error: "Missing fields." }, { status: 400 });
         }
 
-        const job = await Job.findOne({ _id: jobId, access_token: accessToken }).lean<any>();
+        const job = await prisma.job.findFirst({
+            where: { id: jobId, access_token: accessToken },
+        });
+
         if (!job) {
             return NextResponse.json({ error: "Invalid job or token." }, { status: 403 });
         }
@@ -30,14 +34,22 @@ export async function POST(req: Request) {
 
         // If webhook already handled it, nothing to do
         console.log(`[verify-payment] Checking job status for jobId: ${jobId}`);
-        const terminalStates = [JobState.PAYMENT_CONFIRMED, JobState.PAID_BREAKDOWN_GENERATING, JobState.COMPLETED];
+        const terminalStates: JobState[] = [
+            JobState.PAYMENT_CONFIRMED,
+            JobState.PAID_BREAKDOWN_GENERATING,
+            JobState.COMPLETED,
+        ];
         if (terminalStates.includes(job.status)) {
             return NextResponse.json({ verified: true, alreadyProcessing: true });
         }
 
-        // Webhook missed it — we do the full job
+        // Webhook missed it — do the full job
         const upsells = intent.metadata?.upsells ? JSON.parse(intent.metadata.upsells) : [];
-        console.log(`[verify-payment] Webhook likely missed event. Manually confirming and generating breakdown for jobId: ${jobId} with upsells: ${upsells}`);
+        console.log(
+            `[verify-payment] Webhook likely missed event. Manually confirming and generating breakdown for jobId: ${jobId} with upsells:`,
+            upsells,
+        );
+
         await confirmAndGenerate({
             jobId,
             accessToken,

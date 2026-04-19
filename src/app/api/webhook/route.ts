@@ -2,13 +2,7 @@
 
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import dbConnect from "@/lib/db";
-import { Job } from "@/models/Job";
-import { JobState } from "@/types/job";
-import WebhookEvent from "@/models/WebhookEvent";
-import { JobPayment } from "@/models/JobPayment";
-import Temp from "@/models/Temp";
-import { generatePaidBreakdown } from "@/app/api/generate-paid/paidService";
+import prisma from "@/lib/prisma";
 import { confirmAndGenerate } from "@/lib/paymentService";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
@@ -19,9 +13,7 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 export async function POST(req: Request) {
     const rawBody = await req.text();
     const sig = req.headers.get("stripe-signature");
-    console.log("[webhook] Received event with headers:", {
-        "stripe-signature": sig,
-    });
+    console.log("[webhook] Received event with headers:", { "stripe-signature": sig });
 
     if (!sig) {
         return NextResponse.json({ error: "Missing stripe-signature header." }, { status: 400 });
@@ -35,10 +27,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `Invalid signature: ${err.message}` }, { status: 400 });
     }
 
-    await dbConnect();
-    console.log(`[webhook] Processing event ${event.type} (${event.id}) `);
+    console.log(`[webhook] Processing event ${event.type} (${event.id})`);
+
     // Idempotency — if we've seen this event before, return early
-    const alreadyProcessed = await WebhookEvent.findOne({ stripe_event_id: event.id }).lean();
+    const alreadyProcessed = await prisma.webhookEvent.findUnique({
+        where: { stripe_event_id: event.id },
+    });
     if (alreadyProcessed) {
         return NextResponse.json({ received: true, duplicate: true });
     }
@@ -52,7 +46,6 @@ export async function POST(req: Request) {
                 await handleCheckoutCompleted(event);
                 break;
             case "payment_intent.succeeded":
-
                 await handlePaymentIntentSucceeded(event);
                 break;
             default:
@@ -60,11 +53,13 @@ export async function POST(req: Request) {
                 break;
         }
 
-        await WebhookEvent.create({
-            stripe_event_id: event.id,
-            event_type: event.type,
-            job_id: meta.jobId,
-            processed_at: new Date(),
+        await prisma.webhookEvent.create({
+            data: {
+                stripe_event_id: event.id,
+                event_type: event.type,
+                job_id: meta.jobId,
+                processed_at: new Date(),
+            },
         });
 
         return NextResponse.json({ received: true });
@@ -81,9 +76,9 @@ export async function POST(req: Request) {
 
 function extractMetadata(metadata: Stripe.Metadata | null) {
     return {
-        jobId:             metadata?.jobId       ?? null,
-        accessToken:       metadata?.accessToken ?? null,
-        upsells:           metadata?.upsells ? (JSON.parse(metadata.upsells) as string[]) : [] as string[],
+        jobId:               metadata?.jobId       ?? null,
+        accessToken:         metadata?.accessToken ?? null,
+        upsells:             metadata?.upsells ? (JSON.parse(metadata.upsells) as string[]) : [] as string[],
         fromCheckoutSession: metadata?.fromCheckoutSession === "true",
     };
 }
@@ -102,10 +97,10 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
         jobId,
         accessToken,
         upsells,
-        stripeSessionId:   session.id,
-        paymentIntentId:   String(session.payment_intent ?? ""),
-        amountTotal:       session.amount_total ?? 0,
-        currency:          session.currency ?? "gbp",
+        stripeSessionId:  session.id,
+        paymentIntentId:  String(session.payment_intent ?? ""),
+        amountTotal:      session.amount_total ?? 0,
+        currency:         session.currency ?? "gbp",
     });
 }
 
@@ -118,7 +113,9 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
     if (fromCheckoutSession) return;
 
     if (!jobId || !accessToken) {
-        throw new Error(`Validation: Missing jobId or accessToken in payment_intent metadata (${intent.id}).`);
+        throw new Error(
+            `Validation: Missing jobId or accessToken in payment_intent metadata (${intent.id}).`,
+        );
     }
 
     await confirmAndGenerate({

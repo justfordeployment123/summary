@@ -1,13 +1,14 @@
+// src/app/api/generate-paid/paidService.ts
+//
+// CRITICAL: This service must ONLY be called by the internal Stripe webhook handler
+// or the verify-payment fallback. Never call directly from client-side code (§7.2).
 
 import OpenAI from "openai";
-import connectToDatabase from "@/lib/db";
-import { Job } from "@/models/Job";
-import { Setting } from "@/models/Setting";
-import { Prompt } from "@/models/Prompt";
-import { JobToken } from "@/models/JobToken";
+import prisma from "@/lib/prisma";
+import { JobState, PromptType, UrgencyLabel } from "@prisma/client";
 import { checkAndIncrementMonthlyUsage } from "@/lib/tokenBudget";
 import { maybeSendCapAlert } from "@/lib/sendCapAlert";
-import Temp from "@/models/Temp";
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -16,12 +17,10 @@ const INPUT_WORD_HARD_CAP = 1200;
 const MAX_RETRIES = 3;
 const BACKOFF_DELAYS = [0, 2000, 5000];
 const DEFAULT_MAX_OUTPUT_TOKENS = 2000;
-const DEFAULT_MAX_INPUT_TOKENS = 4000;
-const DEFAULT_MODEL = "gpt-4o"; // FIX: Updated from invalid "gpt-4.1"
+const DEFAULT_MODEL = "gpt-4o";
 const COST_PER_1M_INPUT = 2.0;
 const COST_PER_1M_OUTPUT = 8.0;
 
-// FIX: Updated to require Proper Markdown, fixed numbering, and kept the URGENCY line unformatted.
 const MANDATORY_PAID_RULES = `
 
 ---
@@ -41,10 +40,6 @@ If, and ONLY if, no specific timeframes or conditions were provided above, use t
 - Routine: Use this for all other general or informational correspondence.`;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function countWords(text: string): number {
-    return text.trim().split(/\s+/).filter(Boolean).length;
-}
 
 function truncateToWordCap(text: string, cap: number): string {
     const words = text.trim().split(/\s+/);
@@ -78,31 +73,21 @@ async function resolvePromptTemplate(
 
     try {
         if (categoryId) {
-            const categoryPrompt = await Prompt.findOne({
-                category_id: categoryId,
-                type: "paid",
-                is_active: true,
-            })
-                .sort({ version: -1 })
-                .lean<{ prompt_text: string }>();
-
-            if (categoryPrompt?.prompt_text) {
-                dbPromptText = categoryPrompt.prompt_text;
-            }
+            const categoryPrompt = await prisma.prompt.findFirst({
+                where: { category_id: categoryId, type: PromptType.paid, is_active: true },
+                orderBy: { version: "desc" },
+                select: { prompt_text: true },
+            });
+            if (categoryPrompt?.prompt_text) dbPromptText = categoryPrompt.prompt_text;
         }
 
         if (!dbPromptText) {
-            const genericPrompt = await Prompt.findOne({
-                category_id: { $exists: false },
-                type: "paid",
-                is_active: true,
-            })
-                .sort({ version: -1 })
-                .lean<{ prompt_text: string }>();
-
-            if (genericPrompt?.prompt_text) {
-                dbPromptText = genericPrompt.prompt_text;
-            }
+            const genericPrompt = await prisma.prompt.findFirst({
+                where: { category_id: null, type: PromptType.paid, is_active: true },
+                orderBy: { version: "desc" },
+                select: { prompt_text: true },
+            });
+            if (genericPrompt?.prompt_text) dbPromptText = genericPrompt.prompt_text;
         }
     } catch (err) {
         console.warn("[generate-paid] Failed to load prompt from DB, using fallback:", err);
@@ -129,12 +114,16 @@ function hydratePlaceholders(
         template
             .replace(/\{\{document_text\}\}/g, vars.documentText)
             .replace(/\{\{category\}\}/g, vars.categoryName)
-            .replace(/\{\{urgency\}\}/g, vars.urgency) + (vars.upsellInstructions ? `\n\n${vars.upsellInstructions}` : "")
+            .replace(/\{\{urgency\}\}/g, vars.urgency) +
+        (vars.upsellInstructions ? `\n\n${vars.upsellInstructions}` : "")
     );
 }
 
-// FIX: Updated to align with Markdown instruction.
-function buildFallbackPrompt(categoryName: string, documentText: string, upsellInstructions: string): string {
+function buildFallbackPrompt(
+    categoryName: string,
+    documentText: string,
+    upsellInstructions: string,
+): string {
     return `You are an expert document analyst. Produce a detailed section-by-section breakdown of the following ${categoryName} letter.
 
 Structure your breakdown as follows:
@@ -163,27 +152,40 @@ function buildUpsellInstructions(upsells: string[]): string {
     if (!upsells || upsells.length === 0) return "";
     const instructions: string[] = [];
     if (upsells.some((u) => u.toLowerCase().includes("legal"))) {
-        instructions.push("7. **Legal Formatting** — Format key legal clauses in a structured legal style with clear clause references.");
+        instructions.push(
+            "7. **Legal Formatting** — Format key legal clauses in a structured legal style with clear clause references.",
+        );
     }
     if (upsells.some((u) => u.toLowerCase().includes("tone"))) {
-        instructions.push("8. **Tone Rewrite** — Provide a suggested reply or response in a professional, clear tone.");
+        instructions.push(
+            "8. **Tone Rewrite** — Provide a suggested reply or response in a professional, clear tone.",
+        );
     }
     if (upsells.some((u) => u.toLowerCase().includes("detail"))) {
-        instructions.push("9. **Extended Detail** — Expand on each section with additional context and explanations.");
+        instructions.push(
+            "9. **Extended Detail** — Expand on each section with additional context and explanations.",
+        );
     }
     return instructions.join("\n");
 }
 
-// ─── Main exported function (called by webhook handler) ───────────────────────
+// ─── Main exported function (called by paymentService) ────────────────────────
 
-export async function generatePaidBreakdown(jobId: string, extractedText: string, upsells: string[] = []): Promise<{ detailedBreakdown: string }> {
-    await connectToDatabase();
-
+export async function generatePaidBreakdown(
+    jobId: string,
+    extractedText: string,
+    upsells: string[] = [],
+): Promise<{ detailedBreakdown: string }> {
     // ── 1. Re-validate job state (payment lock, §7.2) ──
-    const job = await Job.findById(jobId).populate("category_id").lean<any>();
+    const job = await prisma.job.findUnique({
+        where: { id: jobId },
+        include: { category: true },
+    });
     if (!job) throw new Error("Job not found.");
-    if (job.status !== "PAYMENT_CONFIRMED") {
-        throw new Error(`Cannot generate paid breakdown — job in unexpected state: ${job.status}`);
+    if (job.status !== JobState.PAYMENT_CONFIRMED) {
+        throw new Error(
+            `Cannot generate paid breakdown — job in unexpected state: ${job.status}`,
+        );
     }
 
     // ── 2. Check global monthly token cap (§9.2) ──
@@ -194,32 +196,40 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
 
     // ── 3. Fetch configurable settings ──
     const [maxOutputSetting, wordCapSetting, modelSetting] = await Promise.all([
-        Setting.findOne({ key: "ai_max_output_tokens_paid" }).lean<any>(),
-        Setting.findOne({ key: "ai_input_word_cap" }).lean<any>(),
-        Setting.findOne({ key: "openai_model" }).lean<any>(),
+        prisma.setting.findUnique({ where: { key: "ai_max_output_tokens_paid" } }),
+        prisma.setting.findUnique({ where: { key: "ai_input_word_cap" } }),
+        prisma.setting.findUnique({ where: { key: "openai_model" } }),
     ]);
 
-    const maxOutputTokens: number = maxOutputSetting?.value ?? DEFAULT_MAX_OUTPUT_TOKENS;
-    const wordCap: number = wordCapSetting?.value ?? INPUT_WORD_HARD_CAP;
-    const model: string = modelSetting?.value ?? DEFAULT_MODEL;
+    const maxOutputTokens: number = (maxOutputSetting?.value as number | null) ?? DEFAULT_MAX_OUTPUT_TOKENS;
+    const wordCap: number = (wordCapSetting?.value as number | null) ?? INPUT_WORD_HARD_CAP;
+    const model: string = (modelSetting?.value as string | null) ?? DEFAULT_MODEL;
 
     // ── 4. Enforce word cap on input (§9.1) ──
     const truncatedText = truncateToWordCap(extractedText, wordCap);
 
     // ── 5. Resolve prompt ──
-    const category = job.category_id as any;
-    const categoryId = category?._id?.toString() ?? null;
-    const categoryName = category?.name ?? "General";
-    let urgency = job.urgency ?? "Routine";
+    const categoryId = job.category_id ?? null;
+    const categoryName = job.category?.name ?? "General";
+    let urgency: string = job.urgency ?? "Routine";
 
     const upsellInstructions = buildUpsellInstructions(upsells);
-    const prompt = await resolvePromptTemplate(categoryId, categoryName, truncatedText, urgency, upsellInstructions);
+    const prompt = await resolvePromptTemplate(
+        categoryId,
+        categoryName,
+        truncatedText,
+        urgency,
+        upsellInstructions,
+    );
 
     // ── 6. Transition to PAID_BREAKDOWN_GENERATING ──
-    await Job.findByIdAndUpdate(jobId, {
-        status: "PAID_BREAKDOWN_GENERATING",
-        previous_state: "PAYMENT_CONFIRMED",
-        state_transitioned_at: new Date(),
+    await prisma.job.update({
+        where: { id: jobId },
+        data: {
+            status: JobState.PAID_BREAKDOWN_GENERATING,
+            previous_state: JobState.PAYMENT_CONFIRMED,
+            state_transitioned_at: new Date(),
+        },
     });
 
     // ── 7. Retry loop (§8.1) ──
@@ -250,7 +260,9 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
             const urgencyMatch = rawOutput.match(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i);
             if (urgencyMatch) urgency = urgencyMatch[1];
 
-            const cleanedBreakdown = rawOutput.replace(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i, "").trim();
+            const cleanedBreakdown = rawOutput
+                .replace(/URGENCY:\s*(Routine|Important|Time-Sensitive)/i, "")
+                .trim();
 
             if (!validateOutput(cleanedBreakdown)) {
                 throw new Error(`Output validation failed on attempt ${attempt + 1}`);
@@ -271,20 +283,20 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
 
     // ── 8. Log token usage ──
     if (tokensIn > 0 || tokensOut > 0) {
-        await JobToken.create({
-            job_id: jobId,
-            prompt_type: "paid",
-            tokens_in: tokensIn,
-            tokens_out: tokensOut,
-            cost_estimate: estimateCost(tokensIn, tokensOut),
-            model,
-            attempt_number: attemptNumber,
+        await prisma.jobToken.create({
+            data: {
+                job_id: jobId,
+                prompt_type: PromptType.paid,
+                tokens_in: tokensIn,
+                tokens_out: tokensOut,
+                cost_estimate: estimateCost(tokensIn, tokensOut),
+                ai_model: model,
+                attempt_number: attemptNumber,
+            },
         });
 
-        // ── 9. Increment monthly usage counter & check threshold for alert ──
+        // ── 9. Increment monthly usage & check threshold for alert ──
         const usageResult = await checkAndIncrementMonthlyUsage(tokensIn + tokensOut);
-
-        // Fire alert email on every request while at or above threshold (fire-and-forget)
         if (usageResult.aboveThreshold) {
             maybeSendCapAlert({
                 usedTokens: usageResult.currentUsage,
@@ -297,30 +309,43 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
 
     // ── 10. Handle failure ──
     if (lastError) {
-        await Job.findByIdAndUpdate(jobId, {
-            status: "FAILED",
-            previous_state: "PAID_BREAKDOWN_GENERATING",
-            state_transitioned_at: new Date(),
+        await prisma.job.update({
+            where: { id: jobId },
+            data: {
+                status: JobState.FAILED,
+                previous_state: JobState.PAID_BREAKDOWN_GENERATING,
+                state_transitioned_at: new Date(),
+            },
         });
         throw lastError;
     }
-    // ── 11. Transition to COMPLETED ──
+
+    // ── 11. Transition to COMPLETED & store breakdown in Temp ──
+    // Map the plain string urgency back to the Prisma UrgencyLabel enum.
+    // The regex guarantees only these three values can be set.
+    const urgencyLabelMap: Record<string, UrgencyLabel> = {
+        Routine: UrgencyLabel.Routine,
+        Important: UrgencyLabel.Important,
+        "Time-Sensitive": UrgencyLabel.Time_Sensitive,
+    };
+    const urgencyLabel: UrgencyLabel = urgencyLabelMap[urgency] ?? UrgencyLabel.Routine;
+
     await Promise.all([
-        Job.findByIdAndUpdate(jobId, {
-            status: "COMPLETED",
-            previous_state: "PAID_BREAKDOWN_GENERATING",
-            state_transitioned_at: new Date(),
-            processed_at: new Date(),
-            // paid_summary removed — stored in Temp instead
-            urgency,
-        }),
-        Temp.findOneAndUpdate(
-            {
-                job_id: String(jobId),
+        prisma.job.update({
+            where: { id: jobId },
+            data: {
+                status: JobState.COMPLETED,
+                previous_state: JobState.PAID_BREAKDOWN_GENERATING,
+                state_transitioned_at: new Date(),
+                processed_at: new Date(),
+                urgency: urgencyLabel,
             },
-            { job_id: String(jobId), extracted_text: detailedBreakdown },
-            { upsert: true, new: true },
-        ),
+        }),
+        prisma.temp.upsert({
+            where: { job_id: jobId },
+            update: { extracted_text: detailedBreakdown },
+            create: { job_id: jobId, extracted_text: detailedBreakdown },
+        }),
     ]);
 
     return { detailedBreakdown };

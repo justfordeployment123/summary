@@ -1,12 +1,118 @@
 // src/app/api/download/[format]/route.ts
+// import { NextRequest, NextResponse } from "next/server";
+// import connectToDatabase from "@/lib/db";
+// import { Job } from "@/models/Job";
+// import PDFDocument from "pdfkit";
+// import { Document, Packer, Paragraph, TextRun, AlignmentType, Header, Footer, BorderStyle } from "docx";
+// import path from "path";
+// import fs from "fs";
+// // import path from "path"; // Uncomment if using the custom font fallback below
+
+// // ─── Constants ───────────────────────────────────────────────────────────────
+
+// const EXPIRY_HOURS = 72;
+// const DISCLAIMER =
+//     "This document is an Automated Technology generated summary for informational purposes only and does not constitute legal, financial, or professional advice.";
+
+// // ─── GET handler ─────────────────────────────────────────────────────────────
+
+// export async function GET(req: NextRequest, { params }: { params: Promise<{ format: string }> }) {
+//     try {
+//         await connectToDatabase();
+
+//         const resolvedParams = await params;
+//         const format = resolvedParams.format.toLowerCase();
+
+//         const jobId = req.nextUrl.searchParams.get("job_id");
+//         const token = req.nextUrl.searchParams.get("token");
+
+//         if (!jobId || !token) {
+//             return NextResponse.json({ error: "Missing job ID or access token." }, { status: 400 });
+//         }
+
+//         if (!["pdf", "docx", "txt"].includes(format)) {
+//             return NextResponse.json({ error: "Invalid format requested." }, { status: 400 });
+//         }
+
+//         // ── 1. Retrieve job & verify token ──
+//         const job = await Job.findOne({ _id: jobId, access_token: token }).lean<any>();
+
+//         if (!job) {
+//             return NextResponse.json({ error: "Invalid job reference or access token." }, { status: 403 });
+//         }
+
+//         // ── 2. Enforce paid content guard ──
+//         if (job.status !== "COMPLETED" || !job.stripe_payment_intent_id) {
+//             return NextResponse.json({ error: "Detailed breakdown not available or payment not confirmed." }, { status: 403 });
+//         }
+
+//         // ── 3. Enforce 72-hour expiry ──
+//         const processedAt = new Date(job.processed_at).getTime();
+//         const hoursSinceCompletion = (Date.now() - processedAt) / (1000 * 60 * 60);
+
+//         if (hoursSinceCompletion > EXPIRY_HOURS) {
+//             return NextResponse.json({ error: "Download link has expired. Links expire 72 hours after completion." }, { status: 410 });
+//         }
+
+//         const breakdownText: string = job.paid_summary || "No breakdown available.";
+//         const referenceId: string = job.reference_id || String(job._id);
+//         const dateStr: string = new Date(job.processed_at).toLocaleDateString("en-GB");
+
+//         // ── 4. Generate by format ──
+
+//         if (format === "txt") {
+//             const txtContent = [
+//                 "ExplainMyLetter Breakdown",
+//                 `Reference: ${referenceId}`,
+//                 `Date: ${dateStr}`,
+//                 "",
+//                 stripMarkdown(breakdownText), // was just breakdownText
+//                 // breakdownText,
+//                 "",
+//                 "---",
+//                 DISCLAIMER,
+//             ].join("\n");
+
+//             return new NextResponse(txtContent, {
+//                 headers: {
+//                     "Content-Type": "text/plain; charset=utf-8",
+//                     "Content-Disposition": `attachment; filename="breakdown_${referenceId}.txt"`,
+//                 },
+//             });
+//         }
+
+//         if (format === "pdf") {
+//             const pdfBuffer = await generatePDF(breakdownText, referenceId, dateStr);
+//             return new NextResponse(new Uint8Array(pdfBuffer), {
+//                 headers: {
+//                     "Content-Type": "application/pdf",
+//                     "Content-Disposition": `attachment; filename="breakdown_${referenceId}.pdf"`,
+//                 },
+//             });
+//         }
+
+//         if (format === "docx") {
+//             const docxBuffer = await generateDOCX(breakdownText, referenceId, dateStr);
+//             return new NextResponse(new Uint8Array(docxBuffer), {
+//                 headers: {
+//                     "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+//                     "Content-Disposition": `attachment; filename="breakdown_${referenceId}.docx"`,
+//                 },
+//             });
+//         }
+
+//         return NextResponse.json({ error: "Unhandled format." }, { status: 400 });
+//     } catch (error) {
+//         console.error("[download/route]", error);
+//         return NextResponse.json({ error: "Failed to generate document." }, { status: 500 });
+//     }
+// }
 import { NextRequest, NextResponse } from "next/server";
-import connectToDatabase from "@/lib/db";
-import { Job } from "@/models/Job";
+import prisma from "@/lib/prisma";
 import PDFDocument from "pdfkit";
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Header, Footer, BorderStyle } from "docx";
 import path from "path";
 import fs from "fs";
-// import path from "path"; // Uncomment if using the custom font fallback below
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -14,28 +120,41 @@ const EXPIRY_HOURS = 72;
 const DISCLAIMER =
     "This document is an Automated Technology generated summary for informational purposes only and does not constitute legal, financial, or professional advice.";
 
-// ─── GET handler ─────────────────────────────────────────────────────────────
+// Helper function placeholder (assuming you have this defined in your file)
+// function stripMarkdown(text: string): string {
+//     return text.replace(/(#|\*|_|\[|\]|\(|\))/g, ""); 
+// }
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ format: string }> }) {
+// Ensure you have your generatePDF and generateDOCX functions defined below this in your actual file
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ format: string }> }) {
     try {
-        await connectToDatabase();
-
         const resolvedParams = await params;
         const format = resolvedParams.format.toLowerCase();
 
-        const jobId = req.nextUrl.searchParams.get("job_id");
-        const token = req.nextUrl.searchParams.get("token");
+        // Extract data from the POST body instead of URL params
+        const body = await req.json();
+        const { job_id, token, breakdownText } = body;
 
-        if (!jobId || !token) {
+        if (!job_id || !token) {
             return NextResponse.json({ error: "Missing job ID or access token." }, { status: 400 });
+        }
+
+        if (!breakdownText) {
+            return NextResponse.json({ error: "Missing breakdown text." }, { status: 400 });
         }
 
         if (!["pdf", "docx", "txt"].includes(format)) {
             return NextResponse.json({ error: "Invalid format requested." }, { status: 400 });
         }
 
-        // ── 1. Retrieve job & verify token ──
-        const job = await Job.findOne({ _id: jobId, access_token: token }).lean<any>();
+        // ── 1. Retrieve job & verify token via Prisma ──
+        const job = await prisma.job.findFirst({
+            where: { 
+                id: job_id, 
+                access_token: token 
+            }
+        });
 
         if (!job) {
             return NextResponse.json({ error: "Invalid job reference or access token." }, { status: 403 });
@@ -47,16 +166,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
         }
 
         // ── 3. Enforce 72-hour expiry ──
-        const processedAt = new Date(job.processed_at).getTime();
-        const hoursSinceCompletion = (Date.now() - processedAt) / (1000 * 60 * 60);
+        // Fallback to updated_at if processed_at is null
+        const processedAtDate = job.processed_at || job.updated_at; 
+        const hoursSinceCompletion = (Date.now() - processedAtDate.getTime()) / (1000 * 60 * 60);
 
         if (hoursSinceCompletion > EXPIRY_HOURS) {
             return NextResponse.json({ error: "Download link has expired. Links expire 72 hours after completion." }, { status: 410 });
         }
 
-        const breakdownText: string = job.paid_summary || "No breakdown available.";
-        const referenceId: string = job.reference_id || String(job._id);
-        const dateStr: string = new Date(job.processed_at).toLocaleDateString("en-GB");
+        const referenceId: string = job.reference_id || job.id;
+        const dateStr: string = processedAtDate.toLocaleDateString("en-GB");
 
         // ── 4. Generate by format ──
 
@@ -66,8 +185,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
                 `Reference: ${referenceId}`,
                 `Date: ${dateStr}`,
                 "",
-                stripMarkdown(breakdownText), // was just breakdownText
-                // breakdownText,
+                stripMarkdown(breakdownText),
                 "",
                 "---",
                 DISCLAIMER,
@@ -82,6 +200,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
         }
 
         if (format === "pdf") {
+            // @ts-ignore - Assuming generatePDF is defined in your file
             const pdfBuffer = await generatePDF(breakdownText, referenceId, dateStr);
             return new NextResponse(new Uint8Array(pdfBuffer), {
                 headers: {
@@ -92,6 +211,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
         }
 
         if (format === "docx") {
+             // @ts-ignore - Assuming generateDOCX is defined in your file
             const docxBuffer = await generateDOCX(breakdownText, referenceId, dateStr);
             return new NextResponse(new Uint8Array(docxBuffer), {
                 headers: {
