@@ -23,7 +23,7 @@ import { Prompt } from "@/models/Prompt";
 import { JobToken } from "@/models/JobToken";
 import { checkAndIncrementMonthlyUsage } from "@/lib/tokenBudget";
 import { maybeSendCapAlert } from "@/lib/sendCapAlert";
-
+import Temp from "@/models/Temp";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -322,14 +322,32 @@ export async function generatePaidBreakdown(jobId: string, extractedText: string
     }
 
     // ── 11. Transition to COMPLETED ──
-    await Job.findByIdAndUpdate(jobId, {
-        status: "COMPLETED",
-        previous_state: "PAID_BREAKDOWN_GENERATING",
-        state_transitioned_at: new Date(),
-        processed_at: new Date(),
-        paid_summary: detailedBreakdown,
-        urgency,
-    });
+    // await Job.findByIdAndUpdate(jobId, {
+    //     status: "COMPLETED",
+    //     previous_state: "PAID_BREAKDOWN_GENERATING",
+    //     state_transitioned_at: new Date(),
+    //     processed_at: new Date(),
+    //     paid_summary: detailedBreakdown,
+    //     urgency,
+    // });
+    // ── 11. Transition to COMPLETED ──
+    await Promise.all([
+        Job.findByIdAndUpdate(jobId, {
+            status: "COMPLETED",
+            previous_state: "PAID_BREAKDOWN_GENERATING",
+            state_transitioned_at: new Date(),
+            processed_at: new Date(),
+            // paid_summary removed — stored in Temp instead
+            urgency,
+        }),
+        Temp.findOneAndUpdate(
+            {
+                job_id: String(jobId),
+            },
+            { job_id: String(jobId), extracted_text: detailedBreakdown },
+            { upsert: true, new: true },
+        ),
+    ]);
 
     return { detailedBreakdown };
 }

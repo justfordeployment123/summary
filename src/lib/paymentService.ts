@@ -76,17 +76,12 @@ export async function confirmAndGenerate(args: ConfirmArgs) {
         throw new Error(`Validation: No extracted text in Temp for job ${jobId}. Marked as FAILED.`);
     }
 
-    generatePaidBreakdown(jobId, tempDoc.extracted_text, upsells)
-        .then(async () => {
-            await Temp.deleteOne({ job_id: String(jobId) });
-        })
-        .catch(async (err: any) => {
-            console.error(`[payment] AI generation failed for job ${jobId}:`, err.message);
-            await Promise.all([
-                Job.findByIdAndUpdate(jobId, { status: JobState.FAILED }),
-                JobPayment.findOneAndUpdate({ job_id: jobId }, { $set: { status: "failed" } }),
-            ]);
-        });
-
+    generatePaidBreakdown(jobId, tempDoc.extracted_text, upsells).catch(async (err: any) => {
+        console.error(`[payment] AI generation failed for job ${jobId}:`, err.message);
+        await Promise.all([
+            Job.findByIdAndUpdate(jobId, { status: JobState.FAILED }),
+            JobPayment.findOneAndUpdate({ job_id: jobId }, { $set: { status: "failed" } }),
+        ]);
+    });
     return { skipped: false };
 }

@@ -24,7 +24,7 @@ import { JobState } from "@/types/job";
 import { JobToken } from "@/models/JobToken";
 import { checkAndIncrementMonthlyUsage } from "@/lib/tokenBudget";
 import { maybeSendCapAlert } from "@/lib/sendCapAlert";
-
+import Temp from "@/models/Temp";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -364,15 +364,31 @@ Classification rules:
         // ── 12. Transition job state ──
         // We store the summary regardless of category correctness (user may retry with correct category).
         // If categoryCorrect is false, job moves to AWAITING_PAYMENT is skipped on frontend.
-        await Job.findByIdAndUpdate(jobId, {
-            status: JobState.FREE_SUMMARY_COMPLETE,
-            previous_state: JobState.FREE_SUMMARY_GENERATING,
-            state_transitioned_at: new Date(),
-            urgency: parsedResponse.urgency,
-            free_summary: parsedResponse.summary,
-        });
-
-        // AFTER
+        // await Job.findByIdAndUpdate(jobId, {
+        //     status: JobState.FREE_SUMMARY_COMPLETE,
+        //     previous_state: JobState.FREE_SUMMARY_GENERATING,
+        //     state_transitioned_at: new Date(),
+        //     urgency: parsedResponse.urgency,
+        //     free_summary: parsedResponse.summary,
+        // });
+        // ── 12. Transition job state & persist summary to Temp ──
+        await Promise.all([
+            Job.findByIdAndUpdate(jobId, {
+                status: JobState.FREE_SUMMARY_COMPLETE,
+                previous_state: JobState.FREE_SUMMARY_GENERATING,
+                state_transitioned_at: new Date(),
+                urgency: parsedResponse.urgency,
+                // free_summary removed — stored in Temp collection instead
+            }),
+            Temp.findOneAndUpdate(
+                { job_id: jobId },
+                {
+                    job_id: jobId,
+                    extracted_text: parsedResponse.summary, // reusing extracted_text field for summary
+                },
+                { upsert: true, new: true },
+            ),
+        ]);
         // AFTER
         const topCategoryNames = parsedResponse.topCategories.map((c) => c.name);
         const categoryCorrect = (() => {

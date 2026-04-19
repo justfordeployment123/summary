@@ -17,6 +17,7 @@ import connectToDatabase from "@/lib/db";
 import { Job } from "@/models/Job";
 import Stripe from "stripe";
 import { JobPayment } from "@/models/JobPayment";
+import Temp from "@/models/Temp";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -53,11 +54,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                 return NextResponse.json({ error: "Payment not confirmed." }, { status: 403 });
             }
 
-            // paid_summary missing despite COMPLETED — auto-refund and notify user
-            if (!job.paid_summary) {
+            const tempDoc = await Temp.findOne({ job_id: String(job._id) }).lean<any>();
+            const paidSummary = tempDoc?.extracted_text ?? null;
+
+            if (!paidSummary) {
+                // Auto-refund logic unchanged — paid summary missing despite COMPLETED
                 try {
                     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
-
                     const payment = await JobPayment.findOne({ job_id: job._id });
 
                     if (payment?.stripe_payment_intent_id && job.status !== "REFUNDED") {
@@ -71,15 +74,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                                 previous_state: job.status,
                                 state_transitioned_at: new Date(),
                             });
-
-                            await JobPayment.findByIdAndUpdate(payment._id, {
-                                status: "refunded",
-                            });
+                            await JobPayment.findByIdAndUpdate(payment._id, { status: "refunded" });
                         }
                     }
                 } catch (refundError: any) {
                     console.error("[status/auto-refund]", refundError);
-                    // Don't block the response — fall through to error below
                 }
 
                 return NextResponse.json({
@@ -88,21 +87,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                 });
             }
 
+            // Delete from Temp now that it's been served — TTL is a failsafe only
+            await Temp.deleteOne({ job_id: String(job._id) });
+
             return NextResponse.json({
                 ...base,
-                detailedBreakdown: job.paid_summary,
+                detailedBreakdown: paidSummary,
             });
         }
-
         // ── FREE_SUMMARY_COMPLETE: return free summary for state recovery ─────
         // Supports the case where the user refreshes the page after the free
         // summary is generated but before payment. The frontend stores this in
         // sessionStorage, but if that's cleared this lets us recover.
         // free_summary is the AI output (§11), NOT the raw extracted text (§21).
         if (job.status === "FREE_SUMMARY_COMPLETE" || job.status === "AWAITING_PAYMENT") {
+            const tempDoc = await Temp.findOne({ job_id: String(job._id) }).lean<any>();
             return NextResponse.json({
                 ...base,
-                freeSummary: job.free_summary ?? null,
+                freeSummary: tempDoc?.extracted_text ?? null,
             });
         }
 
