@@ -1,38 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/db";
-import { Prompt } from "@/models/Prompt";
-import { PromptVersion } from "@/models/PromptVersion";
-import mongoose from "mongoose";
+import prisma from "@/lib/prisma";
 
-// ─────────────────────────────────────────────────────────────
 // GET /api/admin/prompts/[id]/versions
-// Returns the full version history for a prompt, newest first.
-// Includes the CURRENT live version as the first entry so the
-// admin sees a complete timeline in one request.
-// ─────────────────────────────────────────────────────────────
 export async function GET(
     req: NextRequest,
-    { params }: { params: Promise<{ id: string }> } // ✅ Updated Type here
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        await connectDB();
-        const { id } = await params; // ✅ Awaited
+        const { id } = await params;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });
-        }
-
-        const promptId = new mongoose.Types.ObjectId(id);
-
-        // Fetch current live prompt + all archived snapshots in parallel
-        const [prompt, archivedVersions] = await Promise.all([
-            Prompt.findById(promptId)
-                .select("version prompt_text updated_at")
-                .lean(),
-            PromptVersion.find({ prompt_id: promptId })
-                .sort({ version: -1 })
-                .lean(),
-        ]);
+        // We can fetch the prompt and all its historical versions in a single query
+        const prompt = await prisma.prompt.findUnique({
+            where: { id },
+            select: {
+                version: true,
+                prompt_text: true,
+                updated_at: true,
+                // Join the versions table natively
+                versions: {
+                    select: {
+                        version: true,
+                        prompt_text: true,
+                        updated_at: true,
+                    },
+                    orderBy: { version: 'desc' } // Prisma handles the sorting automatically
+                }
+            }
+        });
 
         if (!prompt) {
             return NextResponse.json({ error: "Prompt not found." }, { status: 404 });
@@ -45,8 +39,8 @@ export async function GET(
             updatedAt: prompt.updated_at,
         };
 
-        // All archived snapshots (already sorted descending by version)
-        const archivedEntries = archivedVersions.map((v) => ({
+        // All archived snapshots (already sorted by Prisma)
+        const archivedEntries = prompt.versions.map((v) => ({
             version: v.version,
             promptText: v.prompt_text,
             updatedAt: v.updated_at,

@@ -1,38 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/db";
-import { Prompt } from "@/models/Prompt";
-import { PromptVersion } from "@/models/PromptVersion";
-import { Category } from "@/models/Category";
-import mongoose from "mongoose";
+import prisma from "@/lib/prisma";
+import { PromptType } from "@prisma/client";
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/admin/prompts/[id]
-// Returns a single prompt with category name
+// Returns a single prompt with category name natively joined
 // ─────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        await connectDB();
         const { id } = await params;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });
-        }
+        // Fetch prompt and join the category name in one query
+        const prompt = await prisma.prompt.findUnique({
+            where: { id },
+            include: {
+                category: {
+                    select: { name: true }
+                }
+            }
+        });
 
-        const prompt = await Prompt.findById(id).lean();
         if (!prompt) {
             return NextResponse.json({ error: "Prompt not found." }, { status: 404 });
         }
 
-        let categoryName = "Generic";
-        if (prompt.category_id) {
-            const cat = (await Category.findById(prompt.category_id).select("name").lean()) as { name: string } | null;
-            categoryName = cat?.name ?? "Unknown Category";
-        }
+        // Map category name exactly how the frontend expects it
+        const categoryName = prompt.category?.name ?? (prompt.category_id ? "Unknown Category" : "Generic");
 
         return NextResponse.json({
             prompt: {
-                id: (prompt._id as mongoose.Types.ObjectId).toString(),
-                categoryId: prompt.category_id ? prompt.category_id.toString() : null,
+                id: prompt.id,
+                categoryId: prompt.category_id,
                 categoryName,
                 type: prompt.type,
                 promptText: prompt.prompt_text,
@@ -49,18 +47,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // ─────────────────────────────────────────────────────────────
 // PUT /api/admin/prompts/[id]
-// Updates prompt text → snapshots current version → bumps counter.
-// Per requirements: "Prompt versioning: previous versions retained for rollback."
+// Snapshots current version into PromptVersion -> updates text -> bumps counter.
+// Protected by a database transaction.
 // ─────────────────────────────────────────────────────────────
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        await connectDB();
-        const { id } = await params; 
-
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });
-        }
-
+        const { id } = await params;
         const body = await req.json();
         const { promptText } = body;
 
@@ -68,29 +60,42 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             return NextResponse.json({ error: "promptText is required." }, { status: 400 });
         }
 
-        const prompt = await Prompt.findById(id);
-        if (!prompt) {
+        // 1. Fetch the CURRENT state so we can snapshot it
+        const currentPrompt = await prisma.prompt.findUnique({
+            where: { id }
+        });
+
+        if (!currentPrompt) {
             return NextResponse.json({ error: "Prompt not found." }, { status: 404 });
         }
 
-        // Snapshot the CURRENT version before overwriting
-        await PromptVersion.create({
-            prompt_id: prompt._id,
-            version: prompt.version,
-            prompt_text: prompt.prompt_text,
-            updated_at: prompt.updated_at,
-        });
+        const newVersion = currentPrompt.version + 1;
 
-        // Bump version and save updated text
-        const newVersion = (prompt.version ?? 1) + 1;
-        prompt.prompt_text = promptText.trim();
-        prompt.version = newVersion;
-        prompt.updated_at = new Date();
-        await prompt.save();
+        // 2. Execute Snapshot and Update inside a Transaction to guarantee data integrity
+        const [_, updatedPrompt] = await prisma.$transaction([
+            // Action A: Create the historical snapshot
+            prisma.promptVersion.create({
+                data: {
+                    prompt_id: currentPrompt.id,
+                    version: currentPrompt.version,
+                    prompt_text: currentPrompt.prompt_text,
+                    updated_at: currentPrompt.updated_at,
+                }
+            }),
+            // Action B: Update the live prompt
+            prisma.prompt.update({
+                where: { id },
+                data: {
+                    prompt_text: promptText.trim(),
+                    version: newVersion,
+                    // Prisma automatically sets updated_at via @updatedAt in the schema
+                }
+            })
+        ]);
 
         return NextResponse.json({
-            version: newVersion,
-            updatedAt: prompt.updated_at,
+            version: updatedPrompt.version,
+            updatedAt: updatedPrompt.updated_at,
         });
     } catch (error) {
         console.error("[PUT /api/admin/prompts/[id]]", error);
@@ -101,78 +106,65 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 // ─────────────────────────────────────────────────────────────
 // PATCH /api/admin/prompts/[id]
 // Lightweight metadata updates: toggle isActive, change type.
-// Does NOT bump version — use PUT for prompt text changes.
 // ─────────────────────────────────────────────────────────────
-export async function PATCH(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }, // ✅ Updated Type
-) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        await connectDB();
-        const { id } = await params; // ✅ Awaited (was previously synchronous)
-
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });
-        }
-
+        const { id } = await params;
         const body = await req.json();
-        const allowedFields: Record<string, unknown> = {};
+        
+        const allowedFields: Record<string, any> = {};
 
         if (typeof body.isActive === "boolean") allowedFields.is_active = body.isActive;
-        if (body.type && ["free", "paid", "upsell"].includes(body.type)) allowedFields.type = body.type;
+        if (body.type && ["free", "paid", "upsell"].includes(body.type)) allowedFields.type = body.type as PromptType;
 
         if (Object.keys(allowedFields).length === 0) {
             return NextResponse.json({ error: "No valid fields to update." }, { status: 400 });
         }
 
-        allowedFields.updated_at = new Date();
-
-        const updated = await Prompt.findByIdAndUpdate(id, { $set: allowedFields }, { new: true, runValidators: true }).lean();
-
-        if (!updated) {
-            return NextResponse.json({ error: "Prompt not found." }, { status: 404 });
-        }
+        const updated = await prisma.prompt.update({
+            where: { id },
+            data: allowedFields
+        });
 
         return NextResponse.json({
-            id: (updated._id as mongoose.Types.ObjectId).toString(),
+            id: updated.id,
             isActive: updated.is_active,
             type: updated.type,
             version: updated.version,
             updatedAt: updated.updated_at,
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("[PATCH /api/admin/prompts/[id]]", error);
+        
+        if (error.code === 'P2025') {
+            return NextResponse.json({ error: "Prompt not found." }, { status: 404 });
+        }
+        
         return NextResponse.json({ error: "Failed to update prompt." }, { status: 500 });
     }
 }
 
 // ─────────────────────────────────────────────────────────────
 // DELETE /api/admin/prompts/[id]
-// Hard-deletes the prompt and its full version history.
+// Hard-deletes the prompt. The PromptVersion history is auto-deleted 
+// by Postgres via the `onDelete: Cascade` rule in the Prisma schema.
 // ─────────────────────────────────────────────────────────────
-export async function DELETE(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }, // ✅ Updated Type
-) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        await connectDB();
-        const { id } = await params; // ✅ Awaited (was previously synchronous)
+        const { id } = await params;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return NextResponse.json({ error: "Invalid prompt ID." }, { status: 400 });
-        }
-
-        const deleted = await Prompt.findByIdAndDelete(id);
-        if (!deleted) {
-            return NextResponse.json({ error: "Prompt not found." }, { status: 404 });
-        }
-
-        // Clean up version history alongside the prompt
-        await PromptVersion.deleteMany({ prompt_id: new mongoose.Types.ObjectId(id) });
+        await prisma.prompt.delete({
+            where: { id }
+        });
 
         return NextResponse.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
         console.error("[DELETE /api/admin/prompts/[id]]", error);
+        
+        if (error.code === 'P2025') {
+            return NextResponse.json({ error: "Prompt not found." }, { status: 404 });
+        }
+        
         return NextResponse.json({ error: "Failed to delete prompt." }, { status: 500 });
     }
 }

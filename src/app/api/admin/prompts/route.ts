@@ -1,56 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/db";
-import { Prompt } from "@/models/Prompt";
-import { Category } from "@/models/Category";
-import mongoose from "mongoose";
+import prisma from "@/lib/prisma";
+import { PromptType } from "@prisma/client";
 
 // GET /api/admin/prompts
-// Returns all prompt templates, enriched with category name
 export async function GET(req: NextRequest) {
     try {
-        await connectDB();
-
         const { searchParams } = new URL(req.url);
-        const typeFilter = searchParams.get("type"); // free | paid | upsell | null
+        const typeFilter = searchParams.get("type"); 
         const categoryId = searchParams.get("categoryId");
 
-        const query: Record<string, unknown> = {};
+        // Build the Prisma "where" clause dynamically
+        const whereClause: any = {};
+        
         if (typeFilter && ["free", "paid", "upsell"].includes(typeFilter)) {
-            query.type = typeFilter;
+            whereClause.type = typeFilter as PromptType;
         }
         if (categoryId) {
-            query.category_id = categoryId;
+            whereClause.category_id = categoryId;
         }
 
-        // Fetch prompts and categories in parallel
-        const [prompts, categories] = await Promise.all([
-            Prompt.find(query).sort({ updated_at: -1 }).lean(),
-            Category.find({}).select("_id name").lean(),
-        ]);
+        // Fetch prompts AND join the category name in a single query
+        const prompts = await prisma.prompt.findMany({
+            where: whereClause,
+            orderBy: { updated_at: 'desc' },
+            include: {
+                category: {
+                    select: { name: true } // Only pull the name from the Category table
+                }
+            }
+        });
 
-        // Build category lookup map
-        const categoryMap = new Map(categories.map((c: { _id: mongoose.Types.ObjectId; name: string }) => [c._id.toString(), c.name]));
-
-        const enriched = prompts.map(
-            (p: {
-                _id: mongoose.Types.ObjectId;
-                category_id?: mongoose.Types.ObjectId;
-                type: string;
-                prompt_text: string;
-                version: number;
-                is_active: boolean;
-                updated_at: Date;
-            }) => ({
-                id: p._id.toString(),
-                categoryId: p.category_id ? p.category_id.toString() : null,
-                categoryName: p.category_id ? (categoryMap.get(p.category_id.toString()) ?? "Unknown Category") : "Generic",
-                type: p.type,
-                promptText: p.prompt_text,
-                version: p.version,
-                isActive: p.is_active,
-                updatedAt: p.updated_at,
-            }),
-        );
+        // Map it to exactly match the frontend interface you previously used
+        const enriched = prompts.map((p) => ({
+            id: p.id,
+            categoryId: p.category_id,
+            categoryName: p.category?.name || "Generic", // Fallback if no category is attached
+            type: p.type,
+            promptText: p.prompt_text,
+            version: p.version,
+            isActive: p.is_active,
+            updatedAt: p.updated_at,
+        }));
 
         return NextResponse.json({ prompts: enriched });
     } catch (error) {
@@ -60,11 +50,8 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/admin/prompts
-// Creates a new prompt template (version starts at 1)
 export async function POST(req: NextRequest) {
     try {
-        await connectDB();
-
         const body = await req.json();
         const { categoryId, type, promptText } = body;
 
@@ -76,25 +63,25 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "promptText is required." }, { status: 400 });
         }
 
-        // Validate categoryId if provided
-        if (categoryId && !mongoose.Types.ObjectId.isValid(categoryId)) {
-            return NextResponse.json({ error: "Invalid categoryId." }, { status: 400 });
-        }
+        // Prisma automatically handles the UUID format, so we don't need mongoose.Types.ObjectId.isValid
+        // If categoryId is an invalid UUID, Prisma will automatically throw an error during insertion.
 
-        const prompt = await Prompt.create({
-            category_id: categoryId ? new mongoose.Types.ObjectId(categoryId) : undefined,
-            type,
-            prompt_text: promptText.trim(),
-            version: 1,
-            is_active: true,
-            updated_at: new Date(),
+        const prompt = await prisma.prompt.create({
+            data: {
+                category_id: categoryId || null, // Ensure empty strings become null
+                type: type as PromptType,
+                prompt_text: promptText.trim(),
+                version: 1,
+                is_active: true,
+                // Prisma automatically handles updated_at via @updatedAt in the schema
+            }
         });
 
         return NextResponse.json(
             {
                 prompt: {
-                    id: prompt._id.toString(),
-                    categoryId: prompt.category_id ? prompt.category_id.toString() : null,
+                    id: prompt.id,
+                    categoryId: prompt.category_id,
                     type: prompt.type,
                     promptText: prompt.prompt_text,
                     version: prompt.version,
@@ -102,10 +89,16 @@ export async function POST(req: NextRequest) {
                     updatedAt: prompt.updated_at,
                 },
             },
-            { status: 201 },
+            { status: 201 }
         );
-    } catch (error) {
+    } catch (error: any) {
         console.error("[POST /api/admin/prompts]", error);
+        
+        // Handle Foreign Key constraint failure (e.g., if they pass a Category ID that doesn't exist)
+        if (error.code === 'P2003') {
+            return NextResponse.json({ error: "Invalid categoryId. Category does not exist." }, { status: 400 });
+        }
+        
         return NextResponse.json({ error: "Failed to create prompt" }, { status: 500 });
     }
 }
