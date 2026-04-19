@@ -80,6 +80,7 @@ export async function POST(request: Request) {
         // 5. Generate secure UUID for S3
         const fileExtension = fileName.split(".").pop();
         const s3Key = `${uuidv4()}.${fileExtension}`;
+        let fileNameSanitized = fileName.replace(/[^a-zA-Z0-9.\-_]/g, "_"); // Sanitize original filename for logging
 
         // 6. Create presigned URL
         const command = new PutObjectCommand({
@@ -98,6 +99,9 @@ export async function POST(request: Request) {
                 user_name: firstName,
                 marketing_consent: marketingConsent || false,
                 status: JobState.UPLOADED,
+                s3_key: s3Key,
+                file_type: fileType,
+                file_name_original: fileNameSanitized,
             },
         });
 
