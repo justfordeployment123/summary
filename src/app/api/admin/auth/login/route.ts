@@ -1,8 +1,9 @@
+// src/app/api/admin/auth/login/route.ts
+
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import dbConnect from "@/lib/db";
-import { AdminUser } from "@/models/AdminUser";
+import prisma from "@/lib/prisma";
 
 export async function POST(request: Request) {
     try {
@@ -12,12 +13,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
         }
 
-        await dbConnect();
-
         // 1. Find the admin user
-        const admin = await AdminUser.findOne({ email: email.toLowerCase() });
+        const admin = await prisma.adminUser.findUnique({
+            where: { email: email.toLowerCase() },
+        });
+
         if (!admin) {
-            // We return a generic error to prevent email enumeration
+            // Generic error to prevent email enumeration
             return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
         }
 
@@ -28,32 +30,36 @@ export async function POST(request: Request) {
         }
 
         // 3. Update last login timestamp
-        admin.last_login = new Date();
-        await admin.save();
+        await prisma.adminUser.update({
+            where: { id: admin.id },
+            data: { last_login: new Date() },
+        });
 
         // 4. Generate the JWT
         const token = jwt.sign(
             {
-                adminId: admin._id,
+                adminId: admin.id,
                 email: admin.email,
                 role: admin.role,
             },
             process.env.JWT_SECRET!,
-            { expiresIn: "8h" }, // Session expires in 8 hours
+            { expiresIn: "8h" },
         );
 
         // 5. Create the response and set the HTTP-only cookie
-        const response = NextResponse.json({ message: "Login successful", role: admin.role }, { status: 200 });
+        const response = NextResponse.json(
+            { message: "Login successful", role: admin.role },
+            { status: 200 },
+        );
 
         response.cookies.set({
             name: "admin_token",
             value: token,
             httpOnly: true,
-            // secure: process.env.NODE_ENV === "production",
             secure: request.url.startsWith("https"),
             sameSite: "lax",
             path: "/",
-            maxAge: 8 * 60 * 60, // 8 hours in seconds
+            maxAge: 8 * 60 * 60,
         });
 
         return response;

@@ -4,7 +4,7 @@
 //
 // Query params:
 //   survey_type  "free_summary" | "full_breakdown"
-//   category_id  MongoDB ObjectId string
+//   category_id  UUID string
 //   from         ISO date string (start of range, inclusive)
 //   to           ISO date string (end of range, inclusive)
 //   page         number (default 1)
@@ -13,24 +13,22 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import connectDB  from "@/lib/db";
-import { FeedbackSurvey } from "@/models/FeedbackSurvey";
-import { Setting } from "@/models/Setting"; // adjust path if different
-// import { requireAdminAuth } from "@/lib/adminAuth"; // adjust path if different
-// 
+import prisma from "@/lib/prisma";
+import { SurveyType } from "@prisma/client";
+
 // ─── Email helper ──────────────────────────────────────────────────────────────
 
 export async function sendFeedbackNotificationEmail(survey: {
     survey_type: string;
-    reference_id?: string;
-    urgency_label?: string;
-    category_name?: string;
-    rating_ease_of_understanding?: number;
-    rating_helpfulness?: number;
-    rating_accuracy?: number;
-    rating_urgency_clarity?: number;
-    rating_likelihood_to_upgrade?: number;
-    average_rating?: number;
+    reference_id?: string | null;
+    urgency_label?: string | null;
+    category_name?: string | null;
+    rating_ease_of_understanding?: number | null;
+    rating_helpfulness?: number | null;
+    rating_accuracy?: number | null;
+    rating_urgency_clarity?: number | null;
+    rating_likelihood_to_upgrade?: number | null;
+    average_rating?: number | null;
     comment?: string | null;
     converted_to_paid?: boolean;
     purchase_amount_pence?: number | null;
@@ -42,16 +40,19 @@ export async function sendFeedbackNotificationEmail(survey: {
     const pass = process.env.SMTP_PASS;
     const from = process.env.SMTP_FROM ?? user;
 
-    if (!host || !user || !pass) return; // silently skip if SMTP not configured
+    if (!host || !user || !pass) return;
 
-    const emailSetting = await Setting.findOne({ key: "openai_alert_email" }).lean<{ value: string }>();
-    const to = emailSetting?.value;
+    const emailSetting = await prisma.setting.findUnique({
+        where: { key: "openai_alert_email" },
+    });
+
+    const to = emailSetting?.value as string | undefined;
     if (!to) return;
 
     const isFullBreakdown = survey.survey_type === "full_breakdown";
     const label = isFullBreakdown ? "Full Breakdown" : "Free Summary";
     const avg = survey.average_rating?.toFixed(1) ?? "–";
-    const stars = (n?: number) => (n ? "★".repeat(n) + "☆".repeat(5 - n) : "–");
+    const stars = (n?: number | null) => (n ? "★".repeat(n) + "☆".repeat(5 - n) : "–");
     const amount = survey.purchase_amount_pence ? `£${(survey.purchase_amount_pence / 100).toFixed(2)}` : "–";
 
     const urgencyColor: Record<string, string> = {
@@ -67,7 +68,7 @@ export async function sendFeedbackNotificationEmail(survey: {
         [isFullBreakdown ? "Value vs free summary" : "Accuracy", survey.rating_accuracy],
         [isFullBreakdown ? "Overall satisfaction" : "Urgency rating clarity", survey.rating_urgency_clarity],
         [isFullBreakdown ? "Likelihood to return" : "Likelihood to upgrade", survey.rating_likelihood_to_upgrade],
-    ] as [string, number | undefined][];
+    ] as [string, number | null | undefined][];
 
     const html = `
 <!DOCTYPE html>
@@ -229,35 +230,36 @@ export async function GET(req: NextRequest) {
     // if (authError) return authError;
 
     try {
-        await connectDB();
-
         const { searchParams } = new URL(req.url);
-        const survey_type = searchParams.get("survey_type") || undefined;
-        const category_id = searchParams.get("category_id") || undefined;
-        const from = searchParams.get("from") || undefined;
-        const to = searchParams.get("to") || undefined;
+        const survey_type = searchParams.get("survey_type");
+        const category_id = searchParams.get("category_id");
+        const from = searchParams.get("from");
+        const to = searchParams.get("to");
         const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
         const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "25", 10)));
         const exportCsv = searchParams.get("export") === "csv";
 
-        // ── Build filter ───────────────────────────────────────────────────────
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const filter: Record<string, any> = {};
-        if (survey_type) filter.survey_type = survey_type;
-        if (category_id) filter.category_id = category_id;
+        // ── Build Prisma filter ────────────────────────────────────────────────
+        const where: any = {};
+        if (survey_type) where.survey_type = survey_type as SurveyType;
+        if (category_id) where.category_id = category_id;
+
         if (from || to) {
-            filter.created_at = {};
-            if (from) filter.created_at.$gte = new Date(from);
+            where.created_at = {};
+            if (from) where.created_at.gte = new Date(from);
             if (to) {
                 const toDate = new Date(to);
                 toDate.setHours(23, 59, 59, 999);
-                filter.created_at.$lte = toDate;
+                where.created_at.lte = toDate;
             }
         }
 
         // ── CSV export ─────────────────────────────────────────────────────────
         if (exportCsv) {
-            const all = await FeedbackSurvey.find(filter).sort({ created_at: -1 }).lean();
+            const all = await prisma.feedbackSurvey.findMany({
+                where,
+                orderBy: { created_at: "desc" },
+            });
 
             const headers = [
                 "survey_type",
@@ -284,19 +286,19 @@ export async function GET(req: NextRequest) {
             const rows = all.map((s) =>
                 [
                     s.survey_type,
-                    s.reference_id ?? "",
-                    s.category_name ?? "",
-                    s.urgency_label ?? "",
-                    s.rating_ease_of_understanding ?? "",
-                    s.rating_helpfulness ?? "",
-                    s.rating_accuracy ?? "",
-                    s.rating_urgency_clarity ?? "",
-                    s.rating_likelihood_to_upgrade ?? "",
-                    s.average_rating ?? "",
-                    s.comment ?? "",
+                    s.reference_id,
+                    s.category_name,
+                    s.urgency_label,
+                    s.rating_ease_of_understanding,
+                    s.rating_helpfulness,
+                    s.rating_accuracy,
+                    s.rating_urgency_clarity,
+                    s.rating_likelihood_to_upgrade,
+                    s.average_rating,
+                    s.comment,
                     s.converted_to_paid ? "true" : "false",
                     s.purchase_amount_pence ? (s.purchase_amount_pence / 100).toFixed(2) : "",
-                    s.created_at ? new Date(s.created_at as Date).toISOString() : "",
+                    s.created_at ? s.created_at.toISOString() : "",
                 ]
                     .map(escape)
                     .join(","),
@@ -313,14 +315,15 @@ export async function GET(req: NextRequest) {
             });
         }
 
-        // ── JSON paginated response ────────────────────────────────────────────
-        const [total, surveys] = await Promise.all([
-            FeedbackSurvey.countDocuments(filter),
-            FeedbackSurvey.find(filter)
-                .sort({ created_at: -1 })
-                .skip((page - 1) * limit)
-                .limit(limit)
-                .lean(),
+        // ── JSON paginated response (run in parallel via $transaction) ─────────
+        const [total, surveys] = await prisma.$transaction([
+            prisma.feedbackSurvey.count({ where }),
+            prisma.feedbackSurvey.findMany({
+                where,
+                orderBy: { created_at: "desc" },
+                skip: (page - 1) * limit,
+                take: limit,
+            }),
         ]);
 
         return NextResponse.json({

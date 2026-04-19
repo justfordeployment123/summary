@@ -29,6 +29,8 @@ model Category {
 
   // Relations
   prompts    Prompt[]
+  feedbackSurveys FeedbackSurvey[]
+  jobs Job[]
 }
 
 model Upsell {
@@ -89,4 +91,246 @@ model PromptVersion {
   // Prisma handles indexes slightly differently than Mongoose. 
   // This creates the compound index for fast version history lookups.
   @@index([prompt_id, version(sort: Desc)]) 
+}
+
+// --- ENUMS ---
+enum AdminRole {
+  superadmin
+  editor
+  support
+}
+
+enum SurveyType {
+  free_summary
+  full_breakdown
+}
+
+// Prisma enums don't allow hyphens, so we use @map to tell Postgres to keep the hyphen
+enum UrgencyLabel {
+  Routine
+  Important
+  Time_Sensitive @map("Time-Sensitive")
+}
+
+enum RegenerationStatus {
+  triggered
+  completed
+  failed
+}
+
+// --- MODELS ---
+
+model AdminUser {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password_hash String
+  role          AdminRole @default(support)
+  last_login    DateTime?
+  created_at    DateTime  @default(now())
+}
+
+model FeedbackSurvey {
+  id                           String        @id @default(uuid())
+  survey_type                  SurveyType
+  
+  job_id                       String
+  job                       Job           @relation(fields: [job_id], references: [id])
+  reference_id                 String?
+
+  category_id                  String?
+  category                     Category?     @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  category_name                String?
+
+  urgency_label                UrgencyLabel?
+
+  // Ratings 1-5 mapped to integers
+  rating_ease_of_understanding Int?
+  rating_helpfulness           Int?
+  rating_accuracy              Int?
+  rating_urgency_clarity       Int?
+  rating_likelihood_to_upgrade Int?
+
+  comment                      String?       @db.Text
+  converted_to_paid            Boolean       @default(false)
+  purchase_amount_pence        Int?
+  
+  // Note: Computed field, must be calculated in the API route now
+  average_rating               Float?
+
+  created_at                   DateTime      @default(now())
+  updated_at                   DateTime      @updatedAt
+
+  @@unique([job_id, survey_type]) // One survey per type per job
+  @@index([survey_type, created_at(sort: Desc)])
+  @@index([category_id])
+  @@index([converted_to_paid])
+  @@index([average_rating])
+}
+
+model RegenerationLog {
+  id                    String             @id @default(uuid())
+  
+  job_id                String
+  job                Job                @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  
+  triggered_by_admin_id String
+  attempt_number        Int
+  status                RegenerationStatus @default(triggered)
+  created_at            DateTime           @default(now())
+
+  @@index([job_id])
+}
+
+model Temp {
+  id             String   @id @default(uuid())
+  job_id         String   @unique
+  extracted_text String   @db.Text
+  createdAt      DateTime @default(now())
+}
+
+model WebhookEvent {
+  id              String   @id @default(uuid())
+  stripe_event_id String   @unique
+  event_type      String
+  
+  job_id          String?
+  job          Job?     @relation(fields: [job_id], references: [id], onDelete: SetNull)
+  
+  processed_at    DateTime @default(now())
+  created_at      DateTime @default(now())
+}
+
+// --- ENUMS ---
+enum JobState {
+  UPLOADED
+  OCR_PROCESSING
+  OCR_FAILED
+  FREE_SUMMARY_GENERATING
+  FREE_SUMMARY_COMPLETE
+  AWAITING_PAYMENT
+  PAYMENT_CONFIRMED
+  PAID_BREAKDOWN_GENERATING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// --- MODELS ---
+model Job {
+  id                         String        @id @default(uuid())
+  reference_id               String        @unique
+  access_token               String        @unique @default(uuid())
+
+  status                     JobState      @default(UPLOADED)
+  previous_state             String?
+  state_transitioned_at      DateTime      @default(now())
+
+  s3_key                     String?
+  file_name_original         String?
+  file_type                  String?
+
+  // Relation to Category
+  category_id                String
+  category                   Category      @relation(fields: [category_id], references: [id])
+
+  user_email                 String
+  user_name                  String
+  marketing_consent          Boolean       @default(false)
+
+  disclaimer_acknowledged    Boolean       @default(false)
+  disclaimer_acknowledged_at DateTime?
+
+  // Reusing the UrgencyLabel enum from the Feedback models
+  urgency                    UrgencyLabel?
+
+  stripe_session_id          String?
+  stripe_payment_intent_id   String?
+  
+  // PostgreSQL handles arrays natively
+  upsells_purchased          String[]      @default([])
+
+  processed_at               DateTime?
+  deleted_at                 DateTime?
+
+  created_at                 DateTime      @default(now())
+  updated_at                 DateTime      @updatedAt
+
+  // Back-relations to the models we created earlier
+  feedbackSurveys            FeedbackSurvey[]
+  regenerationLogs           RegenerationLog[]
+  webhookEvents              WebhookEvent[]
+  payments                   JobPayment[]
+  stateLogs                  JobStateLog[]
+  tokens                     JobToken[]
+
+  // Indexes for fast lookups
+  @@index([user_email])
+  @@index([stripe_session_id])
+  @@index([stripe_payment_intent_id])
+  @@index([status])
+  @@index([created_at])
+}
+enum PaymentStatus {
+  pending
+  completed
+  failed
+}
+model JobPayment {
+  id                       String        @id @default(uuid())
+  
+  job_id                   String
+  job                      Job           @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  
+  stripe_session_id        String
+  stripe_payment_intent_id String?
+  amount                   Int           // Storing money as an integer (e.g., pennies)
+  currency                 String        @default("gbp")
+  status                   PaymentStatus @default(pending)
+  
+  // Native Postgres String Array!
+  upsells_purchased        String[]      @default([])
+  
+  created_at               DateTime      @default(now())
+
+  @@index([job_id])
+  @@index([stripe_session_id])
+}
+
+model JobStateLog {
+  id           String   @id @default(uuid())
+  
+  job_id       String
+  job          Job      @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  
+  // Leaving these as Strings (rather than the JobState enum) 
+  // allows flexibility if you ever deprecate old states
+  from_state   String
+  to_state     String
+  triggered_by String
+  
+  createdAt    DateTime @default(now())
+
+  @@index([job_id])
+}
+
+model JobToken {
+  id             String     @id @default(uuid())
+  
+  job_id         String
+  job            Job        @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  
+  // Reusing the existing PromptType enum (free, paid, upsell)
+  prompt_type    PromptType 
+  
+  tokens_in      Int
+  tokens_out     Int
+  
+  // Using Float here because OpenAI cost calculations usually involve fractions of a cent
+  cost_estimate  Float      
+  
+  ai_model       String     @default("gpt-4o")
+  attempt_number Int        @default(1)
+  created_at     DateTime   @default(now())
+
+  @@index([job_id])
 }

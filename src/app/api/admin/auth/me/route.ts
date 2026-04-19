@@ -1,3 +1,5 @@
+// src/app/api/admin/auth/me/route.ts
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
@@ -19,7 +21,7 @@ export async function GET() {
             role: string;
         };
 
-        // 3. Return the sanitized user data (NEVER send the password hash!)
+        // 3. Return sanitized user data (NEVER send the password hash!)
         return NextResponse.json(
             {
                 user: {
@@ -31,7 +33,6 @@ export async function GET() {
             { status: 200 },
         );
     } catch (error: any) {
-        // If the token is expired or tampered with, jwt.verify throws an error
         return NextResponse.json({ error: "Session invalid or expired" }, { status: 401 });
     }
 }
