@@ -512,9 +512,10 @@ export default function Home() {
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
     // ── Soft reset — keeps form data, only clears upload/result state ─────────
+   // ── Soft reset — keeps form data, only clears upload/result state ─────────
     const handleRetryWithData = () => {
         setView("form");
-        // setFile(null);
+        setFile(null);
         setUploadStatus("");
         setIsError(false);
         setSummaryData(null);
@@ -526,8 +527,15 @@ export default function Home() {
         setIsPaymentProcessing(false);
         setCategoryMismatch(null);
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        
+        // Push the route for history
         router.push("/#upload");
+
+        // Give React a few milliseconds to render the "form" view, 
+        // then use your existing formRef to scroll right to it.
+        setTimeout(() => {
+            formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 50);
     };
 
     const scrollToUpload = () => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });

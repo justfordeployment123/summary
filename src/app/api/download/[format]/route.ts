@@ -110,7 +110,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import PDFDocument from "pdfkit";
-import { Document, Packer, Paragraph, TextRun, AlignmentType, Header, Footer, BorderStyle } from "docx";
+import { Document, Packer, Paragraph, TextRun, AlignmentType, Header, Footer, BorderStyle, ImageRun } from "docx";
 import path from "path";
 import fs from "fs";
 
@@ -122,7 +122,7 @@ const DISCLAIMER =
 
 // Helper function placeholder (assuming you have this defined in your file)
 // function stripMarkdown(text: string): string {
-//     return text.replace(/(#|\*|_|\[|\]|\(|\))/g, ""); 
+//     return text.replace(/(#|\*|_|\[|\]|\(|\))/g, "");
 // }
 
 // Ensure you have your generatePDF and generateDOCX functions defined below this in your actual file
@@ -150,10 +150,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ for
 
         // ── 1. Retrieve job & verify token via Prisma ──
         const job = await prisma.job.findFirst({
-            where: { 
-                id: job_id, 
-                access_token: token 
-            }
+            where: {
+                id: job_id,
+                access_token: token,
+            },
         });
 
         if (!job) {
@@ -167,7 +167,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ for
 
         // ── 3. Enforce 72-hour expiry ──
         // Fallback to updated_at if processed_at is null
-        const processedAtDate = job.processed_at || job.updated_at; 
+        const processedAtDate = job.processed_at || job.updated_at;
         const hoursSinceCompletion = (Date.now() - processedAtDate.getTime()) / (1000 * 60 * 60);
 
         if (hoursSinceCompletion > EXPIRY_HOURS) {
@@ -211,7 +211,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ for
         }
 
         if (format === "docx") {
-             // @ts-ignore - Assuming generateDOCX is defined in your file
+            // @ts-ignore - Assuming generateDOCX is defined in your file
             const docxBuffer = await generateDOCX(breakdownText, referenceId, dateStr);
             return new NextResponse(new Uint8Array(docxBuffer), {
                 headers: {
@@ -489,13 +489,10 @@ function generatePDF(text: string, referenceId: string, dateStr: string): Promis
                 .lineWidth(0.5)
                 .stroke();
             doc.moveDown(0.5);
-            doc.fontSize(7)
-                .fillColor("#94a3b8")
-                .font("Helvetica")
-                .text(DISCLAIMER, {
-                    align: "center",
-                    lineGap: 2,
-                });
+            doc.fontSize(7).fillColor("#94a3b8").font("Helvetica").text(DISCLAIMER, {
+                align: "center",
+                lineGap: 2,
+            });
 
             doc.end();
         } catch (err) {
@@ -509,6 +506,11 @@ async function generateDOCX(text: string, referenceId: string, dateStr: string):
     const children: Paragraph[] = [];
     const lines = text.split("\n");
 
+    // ── Read logo if it exists ──
+    const logoPath = path.join(process.cwd(), "public", "new-logo.png");
+    const logoExists = fs.existsSync(logoPath);
+    const logoData = logoExists ? fs.readFileSync(logoPath) : null;
+
     for (const raw of lines) {
         const line = raw.trimEnd();
 
@@ -520,7 +522,7 @@ async function generateDOCX(text: string, referenceId: string, dateStr: string):
         if (line.startsWith("## ")) {
             children.push(
                 new Paragraph({
-                    children: [new TextRun({ text: stripInline(line.slice(3)), bold: true, size: 28, color: "12A1A6" })], // was 0F233F
+                    children: [new TextRun({ text: stripInline(line.slice(3)), bold: true, size: 28, color: "12A1A6" })],
                     spacing: { before: 300, after: 120 },
                 }),
             );
@@ -540,7 +542,7 @@ async function generateDOCX(text: string, referenceId: string, dateStr: string):
         if (line.startsWith("# ")) {
             children.push(
                 new Paragraph({
-                    children: [new TextRun({ text: stripInline(line.slice(2)), bold: true, size: 32, color: "12A1A6" })], // was 0F233F
+                    children: [new TextRun({ text: stripInline(line.slice(2)), bold: true, size: 32, color: "12A1A6" })],
                     spacing: { before: 360, after: 160 },
                 }),
             );
@@ -626,15 +628,33 @@ async function generateDOCX(text: string, referenceId: string, dateStr: string):
                 headers: {
                     default: new Header({
                         children: [
+                            // Row 1: Logo on the right
+                            new Paragraph({
+                                alignment: AlignmentType.RIGHT,
+                                children: [
+                                    ...(logoData
+                                        ? [
+                                              new ImageRun({
+                                                  data: logoData,
+                                                  transformation: { width: 130, height: 50 },
+                                                  type: "png",
+                                              }),
+                                          ]
+                                        : [new TextRun({ text: "ExplainMyLetter", bold: true, color: "0d9488", size: 24 })]),
+                                ],
+                                spacing: { after: 60 },
+                            }),
+                            // Row 2: Ref info on the right
                             new Paragraph({
                                 alignment: AlignmentType.RIGHT,
                                 children: [
                                     new TextRun({
-                                        text: `ExplainMyLetter  |  Ref: ${referenceId}  |  ${dateStr}`,
+                                        text: `Ref: ${referenceId}  |  ${dateStr}`,
                                         color: "64748b",
                                         size: 16,
                                     }),
                                 ],
+                                spacing: { after: 0 },
                             }),
                         ],
                     }),

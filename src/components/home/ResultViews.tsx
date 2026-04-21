@@ -2,7 +2,7 @@
 
 import { URGENCY_CONFIG, markdownToHtml } from "@/lib/homeUtils";
 import type { ProcessingViewProps, CompletedViewProps } from "@/types/home";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FeedbackModal, FeedbackButton } from "@/components/home/FeedbackModal";
 
 export function ProcessingView({ pollStatus, pollCount }: ProcessingViewProps) {
@@ -53,6 +53,9 @@ export function CompletedView({ summaryData, completedData, handleDownload, hand
     const urgency = summaryData?.urgency && URGENCY_CONFIG[summaryData.urgency] ? URGENCY_CONFIG[summaryData.urgency] : URGENCY_CONFIG["Routine"];
     const [feedbackOpen, setFeedbackOpen] = useState(false);
 
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: "instant" });
+    }, []);
     const handleDownloadInternal = async (fmt: string) => {
         if (!summaryData || !completedData?.detailedBreakdown) return;
 
