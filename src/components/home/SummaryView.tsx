@@ -86,10 +86,12 @@ export function SummaryView({
 
     // / ← ADD THIS
     useEffect(() => {
-        if (showPaymentForm && clientSecret && paymentFormRef?.current) {
-            setTimeout(() => {
+        if (showPaymentForm && clientSecret) {
+            // Wait for Elements to fully render before scrolling
+            const timer = setTimeout(() => {
                 paymentFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-            }, 100);
+            }, 400);
+            return () => clearTimeout(timer);
         }
     }, [showPaymentForm, clientSecret]);
 
