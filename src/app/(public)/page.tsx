@@ -50,6 +50,7 @@ export default function Home() {
     const [file, setFile] = useState<File | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [disclaimerAcknowledged, setDisclaimerAcknowledged] = useState(false);
+    const [files, setFiles] = useState<File[]>([]);
 
     // ── Upload state ──────────────────────────────────────────────────────────
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -192,7 +193,11 @@ export default function Home() {
     // ── Upload & Summary ──────────────────────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!file || !categoryId || !firstName || !email) {
+
+        // Use multi-file list when available, fall back to single file
+        const fileList = files.length > 0 ? files : file ? [file] : [];
+
+        if (fileList.length === 0 || !categoryId || !firstName || !email) {
             setUploadStatus("Please complete all fields and upload a document.");
             setIsError(true);
             return;
@@ -209,12 +214,17 @@ export default function Home() {
         setCategoryMismatch(null);
 
         try {
-            const { requestUploadUrl, uploadFileToS3, triggerOCR, generateFreeSummary } = await import("@/lib/api");
+            const { requestUploadUrl, uploadFilesToS3, triggerOCR, generateFreeSummary } = await import("@/lib/api");
 
             setUploadStatus(PROCESS_STEPS[0]);
-            const { presignedUrl, s3Key, jobId, accessToken } = await requestUploadUrl({
-                fileName: file.name,
-                fileType: file.type,
+
+            // ── Step 1: request presigned URL(s) ──────────────────────────────────
+            const { uploadSlots, jobId, accessToken } = await requestUploadUrl({
+                // Legacy fields (first file) — kept for backwards compat with the route
+                fileName: fileList[0].name,
+                fileType: fileList[0].type,
+                // Multi-file array
+                files: fileList.map((f) => ({ fileName: f.name, fileType: f.type })),
                 category: categoryId,
                 firstName: firstName.trim(),
                 email: email.trim(),
@@ -225,12 +235,21 @@ export default function Home() {
             setCurrentStep(1);
             setUploadStatus(PROCESS_STEPS[1]);
 
-            // uploadFileToS3 now has built-in timeout (8s) + retry (3×) logic
-            await uploadFileToS3(presignedUrl, file);
+            // ── Step 2: upload all files to S3 in parallel ────────────────────────
+            await uploadFilesToS3(uploadSlots, fileList);
 
             setCurrentStep(2);
             setUploadStatus(PROCESS_STEPS[2]);
-            const ocrResult = await triggerOCR({ jobId, s3Key, fileType: file.type });
+
+            // ── Step 3: OCR — pass all file entries so the route combines them ────
+            const ocrResult = await triggerOCR({
+                jobId,
+                // Legacy fields (first file)
+                s3Key: uploadSlots[0].s3Key,
+                fileType: uploadSlots[0].fileType,
+                // Multi-file entries
+                fileEntries: uploadSlots.map((s) => ({ s3Key: s.s3Key, fileType: s.fileType })),
+            });
 
             if (ocrResult.confidenceFlag) {
                 setUploadStatus("Low confidence detected — results may be slightly inaccurate. You may re-upload a clearer image.");
@@ -238,20 +257,21 @@ export default function Home() {
 
             setCurrentStep(3);
             setUploadStatus(PROCESS_STEPS[3]);
+
+            // ── Steps 4–5: free summary generation (unchanged) ───────────────────
             const aiResult = await generateFreeSummary({ jobId, extractedText: ocrResult.extractedText });
             console.log("[handleSubmit] AI result received", aiResult);
             setCurrentStep(4);
             setUploadStatus(PROCESS_STEPS[4]);
 
-            // ── Category mismatch: show mismatch screen, no payment ──
-            // AFTER
+            // ── Category mismatch: show mismatch screen, no payment ──────────────
             if (aiResult.categoryCorrect === false) {
                 setCategoryMismatch({ topCategories: aiResult.topCategories ?? [] });
                 setView("category_mismatch");
                 return;
             }
 
-            // ── Category correct: show normal summary + payment ──
+            // ── Category correct: show normal summary + payment ───────────────────
             const data: SummaryData = {
                 summary: aiResult.summary,
                 urgency: aiResult.urgency as UrgencyLevel,
@@ -265,12 +285,11 @@ export default function Home() {
             setIsError(true);
             const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
             setUploadStatus(friendlyError(msg));
-            turnstileResetRef.current?.(); // ← add this line
+            turnstileResetRef.current?.();
         } finally {
             setIsUploading(false);
         }
     };
-
     // ── Price helpers ─────────────────────────────────────────────────────────
     const getBasePrice = () => categories.find((c) => c._id === categoryId)?.base_price ?? 499;
     const getUpsellPrice = (u: Upsell) => u.category_prices?.[categoryId] ?? 0;
@@ -493,6 +512,7 @@ export default function Home() {
     const handleReset = () => {
         setView("form");
         setFile(null);
+        setFiles([]); // ← ADD THIS
         setCategoryId("");
         setFirstName("");
         setEmail("");
@@ -512,10 +532,11 @@ export default function Home() {
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
     // ── Soft reset — keeps form data, only clears upload/result state ─────────
-   // ── Soft reset — keeps form data, only clears upload/result state ─────────
+    // ── Soft reset — keeps form data, only clears upload/result state ─────────
     const handleRetryWithData = () => {
         setView("form");
         setFile(null);
+        setFiles([]); // ← ADD THIS
         setUploadStatus("");
         setIsError(false);
         setSummaryData(null);
@@ -527,17 +548,11 @@ export default function Home() {
         setIsPaymentProcessing(false);
         setCategoryMismatch(null);
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-        
-        // Push the route for history
         router.push("/#upload");
-
-        // Give React a few milliseconds to render the "form" view, 
-        // then use your existing formRef to scroll right to it.
         setTimeout(() => {
             formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 50);
     };
-
     const scrollToUpload = () => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -574,6 +589,8 @@ export default function Home() {
                             turnstileToken={turnstileToken}
                             setTurnstileToken={setTurnstileToken}
                             turnstileResetRef={turnstileResetRef} // ← add this
+                            files={files}
+                            setFiles={setFiles}
                         />
                     </div>
                 )}

@@ -22,11 +22,82 @@ const textractClient = new TextractClient({
     },
 });
 
+// ─── Extract text from a single S3 object ─────────────────────────────────────
+async function extractFromS3(
+    s3Key: string,
+    fileType: string,
+    highThreshold: number,
+    lowThreshold: number,
+): Promise<{ text: string; confidenceFlag: boolean }> {
+    let extractedText = "";
+    let confidenceFlag = false;
+
+    if (fileType === "image/jpeg" || fileType === "image/png") {
+        const command = new DetectDocumentTextCommand({
+            Document: {
+                S3Object: { Bucket: process.env.AWS_S3_BUCKET_NAME!, Name: s3Key },
+            },
+        });
+        const response = await textractClient.send(command);
+
+        let totalConfidence = 0;
+        let wordCount = 0;
+
+        response.Blocks?.forEach((block) => {
+            if (block.BlockType === "LINE" && block.Text) {
+                extractedText += block.Text + "\n";
+            }
+            if (block.BlockType === "WORD" && block.Confidence !== undefined) {
+                totalConfidence += block.Confidence;
+                wordCount++;
+            }
+        });
+
+        const averageConfidence = wordCount > 0 ? totalConfidence / wordCount : 0;
+
+        if (averageConfidence < lowThreshold) {
+            throw new Error("OCR_CONFIDENCE_BELOW_THRESHOLD");
+        } else if (averageConfidence < highThreshold) {
+            confidenceFlag = true;
+        }
+    } else {
+        const getObjCmd = new GetObjectCommand({
+            Bucket: process.env.AWS_S3_BUCKET_NAME!,
+            Key: s3Key,
+        });
+        const s3Response = await s3Client.send(getObjCmd);
+        const byteArray = await s3Response.Body?.transformToByteArray();
+        const buffer = Buffer.from(byteArray!);
+
+        if (fileType === "application/pdf") {
+            const pdfData = await pdfParse(buffer);
+            extractedText = pdfData.text;
+        } else if (fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+            const docxData = await mammoth.extractRawText({ buffer });
+            extractedText = docxData.value;
+        }
+
+        if (!extractedText || extractedText.trim().length === 0) {
+            throw new Error("EMPTY_DOCUMENT");
+        }
+    }
+
+    return { text: extractedText, confidenceFlag };
+}
+
 export async function POST(request: Request) {
     try {
-        const { jobId, s3Key, fileType } = await request.json();
+        const body = await request.json();
+        const { jobId, s3Key, fileType, fileEntries } = body;
 
-        if (!jobId || !s3Key) {
+        // ── Normalise into an array of { s3Key, fileType } ───────────────────
+        // Supports both:
+        //   Legacy:  { jobId, s3Key, fileType }
+        //   Multi:   { jobId, fileEntries: [{ s3Key, fileType }, ...] }
+        const entries: { s3Key: string; fileType: string }[] =
+            Array.isArray(fileEntries) && fileEntries.length > 0 ? fileEntries : [{ s3Key, fileType }];
+
+        if (!jobId || entries.length === 0) {
             return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
         }
 
@@ -51,97 +122,82 @@ export async function POST(request: Request) {
         const HIGH_THRESHOLD: number = (highSetting?.value as number) ?? 85;
         const LOW_THRESHOLD: number = (lowSetting?.value as number) ?? 70;
 
-        console.log("Starting OCR Processing for Job ID:", jobId);
-        let extractedText = "";
-        let confidenceFlag = false;
+        console.log(`Starting OCR Processing for Job ID: ${jobId} — ${entries.length} file(s)`);
 
-        try {
-            if (fileType === "image/jpeg" || fileType === "image/png") {
-                const command = new DetectDocumentTextCommand({
-                    Document: {
-                        S3Object: { Bucket: process.env.AWS_S3_BUCKET_NAME!, Name: s3Key },
+        // ── Extract text from each file, collect results and clean up S3 ──
+        const extractedSegments: string[] = [];
+        let anyConfidenceFlag = false;
+
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+            try {
+                const { text, confidenceFlag } = await extractFromS3(entry.s3Key, entry.fileType, HIGH_THRESHOLD, LOW_THRESHOLD);
+                if (confidenceFlag) anyConfidenceFlag = true;
+                extractedSegments.push(text.trim());
+            } catch (extractionError: any) {
+                console.error(`Extraction failed for file ${i + 1} (${entry.s3Key}):`, extractionError.message);
+
+                // Clean up all S3 objects on failure
+                await Promise.all(
+                    entries.map((e) =>
+                        s3Client.send(new DeleteObjectCommand({ Bucket: process.env.AWS_S3_BUCKET_NAME!, Key: e.s3Key })).catch(console.error),
+                    ),
+                );
+
+                await prisma.job.update({
+                    where: { id: jobId },
+                    data: {
+                        status: JobState.OCR_FAILED,
+                        previous_state: JobState.OCR_PROCESSING,
+                        state_transitioned_at: new Date(),
                     },
                 });
 
-                const response = await textractClient.send(command);
-                let totalConfidence = 0;
-                let wordCount = 0;
+                const errorMsg =
+                    extractionError.message === "OCR_CONFIDENCE_BELOW_THRESHOLD"
+                        ? `File ${i + 1}: Image quality too low to read clearly. Please re-upload a clearer image.`
+                        : `File ${i + 1}: The document appears to be corrupt, password-protected, or unreadable. Please re-upload.`;
 
-                response.Blocks?.forEach((block) => {
-                    if (block.BlockType === "LINE" && block.Text) {
-                        extractedText += block.Text + "\n";
-                    }
-                    if (block.BlockType === "WORD" && block.Confidence !== undefined) {
-                        totalConfidence += block.Confidence;
-                        wordCount++;
-                    }
-                });
-
-                const averageConfidence = wordCount > 0 ? totalConfidence / wordCount : 0;
-
-                if (averageConfidence < LOW_THRESHOLD) {
-                    throw new Error("OCR_CONFIDENCE_BELOW_THRESHOLD");
-                } else if (averageConfidence < HIGH_THRESHOLD) {
-                    confidenceFlag = true;
-                }
-            } else {
-                const getObjCmd = new GetObjectCommand({
-                    Bucket: process.env.AWS_S3_BUCKET_NAME!,
-                    Key: s3Key,
-                });
-                const s3Response = await s3Client.send(getObjCmd);
-                const byteArray = await s3Response.Body?.transformToByteArray();
-                const buffer = Buffer.from(byteArray!);
-
-                if (fileType === "application/pdf") {
-                    const pdfData = await pdfParse(buffer);
-                    extractedText = pdfData.text;
-                } else if (fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-                    const docxData = await mammoth.extractRawText({ buffer });
-                    extractedText = docxData.value;
-                }
-
-                if (!extractedText || extractedText.trim().length === 0) {
-                    throw new Error("EMPTY_DOCUMENT");
-                }
+                return NextResponse.json({ error: "EXTRACTION_FAILED", message: errorMsg }, { status: 422 });
             }
-        } catch (extractionError: any) {
-            console.error("Extraction Failed:", extractionError.message);
-
-            await prisma.job.update({
-                where: { id: jobId },
-                data: {
-                    status: JobState.OCR_FAILED,
-                    previous_state: JobState.OCR_PROCESSING,
-                    state_transitioned_at: new Date(),
-                },
-            });
-
-            await s3Client
-                .send(new DeleteObjectCommand({ Bucket: process.env.AWS_S3_BUCKET_NAME!, Key: s3Key }))
-                .catch(console.error);
-
-            const errorMsg =
-                extractionError.message === "OCR_CONFIDENCE_BELOW_THRESHOLD"
-                    ? "Image quality too low to read clearly. Please re-upload a clearer image."
-                    : "The document appears to be corrupt, password-protected, or unreadable. Please re-upload.";
-
-            return NextResponse.json({ error: "EXTRACTION_FAILED", message: errorMsg }, { status: 422 });
         }
 
-        // ── 1,200-word hard cap ──
-        const textWords = extractedText.trim().split(/\s+/);
+        // ── Join segments with clear page separators ──────────────────────────
+        // Single file: no separator needed, just use the text as-is.
+        // Multiple files: separate with a "Page N" header so the AI understands
+        // each segment may be a continuation or a separate page of the letter.
+        let combinedText: string;
+
+        if (extractedSegments.length === 1) {
+            combinedText = extractedSegments[0];
+        } else {
+            combinedText = extractedSegments
+                .map((segment, i) => {
+                    if (i === 0) return segment;
+                    return `\n\nPage ${i + 1}\n\n${segment}`;
+                })
+                .join("");
+        }
+
+        // ── 1,200-word hard cap on combined text ──────────────────────────────
+        const textWords = combinedText.trim().split(/\s+/);
         if (textWords.length > 1200) {
-            extractedText = textWords.slice(0, 1200).join(" ");
+            combinedText = textWords.slice(0, 1200).join(" ");
         }
-        console.log(`Extraction complete for Job ID: ${jobId}. Word count: ${textWords.length}. Confidence flag: ${confidenceFlag}`);
-        console.log("Extracted Text Sample:", extractedText.slice(0, 500));
+
+        console.log(
+            `Extraction complete for Job ID: ${jobId}. ` +
+                `Files: ${entries.length}. ` +
+                `Total word count: ${textWords.length}. ` +
+                `Confidence flag: ${anyConfidenceFlag}`,
+        );
+        console.log("Combined text sample:", combinedText.slice(0, 500));
 
         // ── Store in Temp collection ──
         await prisma.temp.upsert({
             where: { job_id: jobId },
-            update: { extracted_text: extractedText },
-            create: { job_id: jobId, extracted_text: extractedText },
+            update: { extracted_text: combinedText },
+            create: { job_id: jobId, extracted_text: combinedText },
         });
 
         // ── Transition state ──
@@ -154,10 +210,7 @@ export async function POST(request: Request) {
             },
         });
 
-        return NextResponse.json(
-            { message: "Extraction Complete", extractedText, confidenceFlag },
-            { status: 200 },
-        );
+        return NextResponse.json({ message: "Extraction Complete", extractedText: combinedText, confidenceFlag: anyConfidenceFlag }, { status: 200 });
     } catch (error) {
         console.error("Processing Route Error:", error);
         return NextResponse.json({ error: "Failed to process document" }, { status: 500 });

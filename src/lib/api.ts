@@ -1,7 +1,6 @@
 // src/lib/api.ts
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
-
 export interface UploadInitPayload {
     fileName: string;
     fileType: string;
@@ -10,17 +9,29 @@ export interface UploadInitPayload {
     email: string;
     marketingConsent: boolean;
     turnstileToken: string;
+    // Multi-file: pass the full list instead of a single fileName/fileType
+    files?: { fileName: string; fileType: string }[];
+}
+
+export interface UploadSlot {
+    presignedUrl: string;
+    s3Key: string;
+    fileType: string;
 }
 
 export interface UploadInitResponse {
+    // Legacy single-file fields (kept for backwards compat)
     presignedUrl: string;
     s3Key: string;
+    // Multi-file array — always present (even for a single file)
+    uploadSlots: UploadSlot[];
     jobId: string;
     accessToken: string;
 }
 
 /**
- * Step 1: Asks the backend for an AWS S3 presigned URL and creates the Job in the DB.
+ * Step 1: Asks the backend for one or more AWS S3 presigned URLs and creates
+ * the Job in the DB. Accepts either a single file (legacy) or a `files` array.
  */
 export async function requestUploadUrl(data: UploadInitPayload): Promise<UploadInitResponse> {
     const res = await fetch("/api/upload", {
@@ -40,7 +51,8 @@ export async function requestUploadUrl(data: UploadInitPayload): Promise<UploadI
 // ─── S3 Upload ───────────────────────────────────────────────────────────────
 
 /**
- * Step 2: Pushes the physical file directly to AWS S3 using the presigned URL.
+ * Upload a single file to S3 using a presigned URL.
+ * Has built-in timeout (default 8s) and retry (3×) logic.
  */
 export async function uploadFileToS3(presignedUrl: string, file: File, timeoutMs = 8000, maxRetries = 3): Promise<void> {
     let lastError: Error | null = null;
@@ -79,12 +91,29 @@ export async function uploadFileToS3(presignedUrl: string, file: File, timeoutMs
     );
 }
 
+/**
+ * Upload multiple files to S3 in parallel using their individual presigned URLs.
+ * Throws on first failure with a human-readable message.
+ */
+export async function uploadFilesToS3(slots: UploadSlot[], files: File[]): Promise<void> {
+    await Promise.all(
+        slots.map((slot, i) => {
+            const file = files[i];
+            if (!file) throw new Error(`Missing file for slot ${i + 1}`);
+            return uploadFileToS3(slot.presignedUrl, file);
+        }),
+    );
+}
+
 // ─── OCR ─────────────────────────────────────────────────────────────────────
 
 export interface OCRPayload {
     jobId: string;
+    // Legacy single-file fields
     s3Key: string;
     fileType: string;
+    // Multi-file: array of { s3Key, fileType } — takes precedence if present
+    fileEntries?: { s3Key: string; fileType: string }[];
 }
 
 export interface OCRResponse {
@@ -94,7 +123,8 @@ export interface OCRResponse {
 }
 
 /**
- * Step 3: Tells the backend to read the file sitting in S3 using AWS Textract or Parsers.
+ * Step 3: Tells the backend to read the file(s) sitting in S3 and return
+ * the combined extracted text.
  */
 export async function triggerOCR(data: OCRPayload): Promise<OCRResponse> {
     const res = await fetch("/api/process", {
@@ -145,7 +175,6 @@ export async function generateFreeSummary(data: GenerateFreePayload): Promise<Ge
 
     return res.json();
 }
-
 // ─── Payment: Embedded Elements flow (primary) ────────────────────────────────
 
 export interface CreatePaymentIntentPayload {

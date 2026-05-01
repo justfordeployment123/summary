@@ -3,10 +3,10 @@
 import { Spinner, CheckIcon } from "@/components/home/primitives";
 import type { UploadSectionProps } from "@/types/home";
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
-import { fontSize } from "pdfkit";
 import { useRef, useState, useEffect } from "react";
 
 const ALLOWED_TYPES = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "image/jpeg", "image/png"];
+const MAX_FILES = 5;
 
 export function UploadSection({
     formRef,
@@ -34,14 +34,31 @@ export function UploadSection({
     turnstileToken,
     setTurnstileToken,
     turnstileResetRef,
+    // Multi-file props
+    files,
+    setFiles,
 }: UploadSectionProps & {
     authorisationConsent?: boolean;
     setAuthorisationConsent?: (v: boolean) => void;
     turnstileResetRef?: React.RefObject<(() => void) | null>;
+    files?: File[];
+    setFiles?: (files: File[]) => void;
 }) {
     const [turnstileError, setTurnstileError] = useState(false);
     const turnstileRef = useRef<TurnstileInstance>(undefined);
     const turnstileTokenRef = useRef<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const addMoreInputRef = useRef<HTMLInputElement>(null);
+
+    // Use multi-file list if provided, otherwise fall back to single file
+    const fileList: File[] = files ?? (file ? [file] : []);
+    const setFileList = (newFiles: File[]) => {
+        if (setFiles) {
+            setFiles(newFiles);
+        }
+        // Keep single-file prop in sync with first file for backwards compat
+        setFile(newFiles[0] ?? null);
+    };
 
     // Expose reset to parent
     useEffect(() => {
@@ -53,10 +70,31 @@ export function UploadSection({
         }
     }, [turnstileResetRef, setTurnstileToken]);
 
-    const handleFileChange = (selectedFile: File) => {
-        if (selectedFile.size > 10 * 1024 * 1024) return;
-        if (!ALLOWED_TYPES.includes(selectedFile.type)) return;
-        setFile(selectedFile);
+    const validateAndAddFiles = (incoming: FileList | File[]) => {
+        const arr = Array.from(incoming);
+        const valid = arr.filter((f) => {
+            if (f.size > 10 * 1024 * 1024) return false;
+            if (!ALLOWED_TYPES.includes(f.type)) return false;
+            return true;
+        });
+        // Deduplicate by name+size
+        const existing = new Set(fileList.map((f) => `${f.name}-${f.size}`));
+        const deduped = valid.filter((f) => !existing.has(`${f.name}-${f.size}`));
+        const combined = [...fileList, ...deduped].slice(0, MAX_FILES);
+        setFileList(combined);
+    };
+
+    const removeFile = (index: number) => {
+        const updated = fileList.filter((_, i) => i !== index);
+        setFileList(updated);
+    };
+
+    const handleDropZone = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files?.length) {
+            validateAndAddFiles(e.dataTransfer.files);
+        }
     };
 
     const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -79,6 +117,20 @@ export function UploadSection({
         { feature: "Questions to ask", free: false, full: true },
         { feature: "Possible next steps", free: false, full: true },
     ];
+
+    const getFileIcon = (type: string) => {
+        if (type === "application/pdf") return "PDF";
+        if (type.includes("wordprocessing")) return "DOC";
+        if (type.startsWith("image/")) return "IMG";
+        return "FILE";
+    };
+
+    const getFileIconColor = (type: string) => {
+        if (type === "application/pdf") return { bg: "rgba(239,68,68,0.12)", color: "#ef4444" };
+        if (type.includes("wordprocessing")) return { bg: "rgba(59,130,246,0.12)", color: "#3b82f6" };
+        if (type.startsWith("image/")) return { bg: "rgba(16,185,129,0.12)", color: "#10b981" };
+        return { bg: "rgba(99,102,241,0.12)", color: "#6366f1" };
+    };
 
     return (
         <>
@@ -104,6 +156,23 @@ export function UploadSection({
                     .two-col {
                         flex-direction: column !important;
                     }
+                }
+                .file-item-remove {
+                    opacity: 0;
+                    transition: opacity 0.15s ease;
+                }
+                .file-item-row:hover .file-item-remove {
+                    opacity: 1;
+                }
+                .add-more-btn {
+                    transition: background 0.15s ease, border-color 0.15s ease;
+                }
+                .add-more-btn:hover {
+                    background: rgba(18,161,166,0.08) !important;
+                    border-color: #12A1A6 !important;
+                }
+                .add-more-btn:hover span {
+                    color: #12A1A6 !important;
                 }
             `}</style>
 
@@ -269,7 +338,7 @@ export function UploadSection({
                                     </span>
                                 </label>
 
-                                {/* Dropzone */}
+                                {/* ── Multi-file Dropzone ── */}
                                 <div>
                                     <label
                                         style={{
@@ -282,56 +351,162 @@ export function UploadSection({
                                             marginBottom: 8,
                                         }}
                                     >
-                                        Your Document <span style={{ color: "#f43f5e" }}>*</span>
-                                    </label>
-                                    <div
-                                        className={`dropzone${isDragging ? " dragging" : ""}${file ? " has-file" : ""}`}
-                                        onDragOver={(e) => {
-                                            e.preventDefault();
-                                            setIsDragging(true);
-                                        }}
-                                        onDragLeave={() => setIsDragging(false)}
-                                        onDrop={handleDrop}
-                                    >
-                                        <input
-                                            type="file"
-                                            onChange={(e) => {
-                                                const f = e.target.files?.[0];
-                                                if (f) handleFileChange(f);
-                                            }}
-                                            accept=".pdf,.docx,.jpg,.jpeg,.png"
-                                            disabled={isUploading}
-                                        />
-                                        {file ? (
-                                            <div
+                                        Your Document{fileList.length !== 1 ? "s" : ""} <span style={{ color: "#f43f5e" }}>*</span>
+                                        {fileList.length > 0 && (
+                                            <span
                                                 style={{
-                                                    display: "flex",
-                                                    flexDirection: "column",
-                                                    alignItems: "center",
-                                                    gap: 10,
-                                                    animation: "fadeIn 0.3s ease",
+                                                    marginLeft: 8,
+                                                    fontSize: "0.72rem",
+                                                    fontWeight: 600,
+                                                    color: "#94a3b8",
+                                                    textTransform: "none",
+                                                    letterSpacing: 0,
                                                 }}
                                             >
-                                                <div
-                                                    style={{
-                                                        width: 48,
-                                                        height: 48,
-                                                        borderRadius: "50%",
-                                                        background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "center",
-                                                        animation: "checkPop 0.4s ease",
-                                                    }}
-                                                >
-                                                    <CheckIcon size={20} />
-                                                </div>
-                                                <p style={{ fontWeight: 800, color: "#12A1A6", fontSize: "0.9rem" }}>{file.name}</p>
-                                                <p style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-                                                    {(file.size / 1024).toFixed(0)} KB — click to change
-                                                </p>
-                                            </div>
-                                        ) : (
+                                                {fileList.length}/{MAX_FILES} files
+                                            </span>
+                                        )}
+                                    </label>
+
+                                    {/* Existing files list */}
+                                    {fileList.length > 0 && (
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                gap: 8,
+                                                marginBottom: 10,
+                                            }}
+                                        >
+                                            {fileList.map((f, i) => {
+                                                const iconStyle = getFileIconColor(f.type);
+                                                return (
+                                                    <div
+                                                        key={`${f.name}-${f.size}`}
+                                                        className="file-item-row"
+                                                        style={{
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: 12,
+                                                            padding: "10px 14px",
+                                                            borderRadius: 12,
+                                                            background: "#f8fafc",
+                                                            border: "1.5px solid #e2e8f0",
+                                                            animation: "fadeIn 0.25s ease",
+                                                        }}
+                                                    >
+                                                        {/* Page indicator */}
+                                                        <div
+                                                            style={{
+                                                                flexShrink: 0,
+                                                                width: 22,
+                                                                height: 22,
+                                                                borderRadius: "50%",
+                                                                background: "linear-gradient(135deg,#12A1A6,#54D6D4)",
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "center",
+                                                                fontSize: "0.65rem",
+                                                                fontWeight: 800,
+                                                                color: "#fff",
+                                                            }}
+                                                        >
+                                                            {i + 1}
+                                                        </div>
+
+                                                        {/* File type badge */}
+                                                        <div
+                                                            style={{
+                                                                flexShrink: 0,
+                                                                padding: "2px 7px",
+                                                                borderRadius: 6,
+                                                                background: iconStyle.bg,
+                                                                fontSize: "0.62rem",
+                                                                fontWeight: 800,
+                                                                color: iconStyle.color,
+                                                                letterSpacing: "0.05em",
+                                                            }}
+                                                        >
+                                                            {getFileIcon(f.type)}
+                                                        </div>
+
+                                                        {/* File name */}
+                                                        <span
+                                                            style={{
+                                                                flex: 1,
+                                                                fontSize: "0.82rem",
+                                                                fontWeight: 600,
+                                                                color: "#334155",
+                                                                overflow: "hidden",
+                                                                textOverflow: "ellipsis",
+                                                                whiteSpace: "nowrap",
+                                                            }}
+                                                        >
+                                                            {f.name}
+                                                        </span>
+
+                                                        {/* File size */}
+                                                        <span
+                                                            style={{
+                                                                flexShrink: 0,
+                                                                fontSize: "0.72rem",
+                                                                color: "#94a3b8",
+                                                                fontWeight: 500,
+                                                            }}
+                                                        >
+                                                            {(f.size / 1024).toFixed(0)} KB
+                                                        </span>
+
+                                                        {/* Remove button */}
+                                                        {!isUploading && (
+                                                            <button
+                                                                type="button"
+                                                                className="file-item-remove"
+                                                                onClick={() => removeFile(i)}
+                                                                style={{
+                                                                    flexShrink: 0,
+                                                                    width: 22,
+                                                                    height: 22,
+                                                                    borderRadius: "50%",
+                                                                    background: "rgba(244,63,94,0.1)",
+                                                                    border: "none",
+                                                                    cursor: "pointer",
+                                                                    display: "flex",
+                                                                    alignItems: "center",
+                                                                    justifyContent: "center",
+                                                                    padding: 0,
+                                                                }}
+                                                                title="Remove file"
+                                                            >
+                                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="3">
+                                                                    <path strokeLinecap="round" d="M18 6L6 18M6 6l12 12" />
+                                                                </svg>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* Drop zone — shown when no files yet, or as add-more area */}
+                                    {fileList.length === 0 ? (
+                                        /* Primary dropzone */
+                                        <div
+                                            className={`dropzone${isDragging ? " dragging" : ""}`}
+                                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                                            onDragLeave={() => setIsDragging(false)}
+                                            onDrop={handleDropZone}
+                                            style={{ position: "relative" }}
+                                        >
+                                            <input
+                                                ref={fileInputRef}
+                                                type="file"
+                                                multiple
+                                                onChange={(e) => { if (e.target.files?.length) validateAndAddFiles(e.target.files); }}
+                                                accept=".pdf,.docx,.jpg,.jpeg,.png"
+                                                disabled={isUploading}
+                                            />
                                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                                                 <div
                                                     style={{
@@ -344,23 +519,83 @@ export function UploadSection({
                                                         justifyContent: "center",
                                                     }}
                                                 >
-                                                    <svg
-                                                        width="24"
-                                                        height="24"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        stroke="#12A1A6"
-                                                        strokeWidth="1.8"
-                                                        strokeLinecap="round"
-                                                    >
+                                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#12A1A6" strokeWidth="1.8" strokeLinecap="round">
                                                         <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                                                     </svg>
                                                 </div>
-                                                <p style={{ fontWeight: 700, color: "#475569", fontSize: "0.9rem" }}>Drop your document here</p>
-                                                <p style={{ fontSize: "0.75rem", color: "#94a3b8" }}>PDF, DOCX, JPG, PNG · Max 10 MB</p>
+                                                <p style={{ fontWeight: 700, color: "#475569", fontSize: "0.9rem" }}>Drop your document(s) here</p>
+                                                <p style={{ fontSize: "0.75rem", color: "#94a3b8" }}>PDF, DOCX, JPG, PNG · Max 10 MB each · Up to {MAX_FILES} files</p>
                                             </div>
-                                        )}
-                                    </div>
+                                        </div>
+                                    ) : fileList.length < MAX_FILES && !isUploading ? (
+                                        /* Add more button — shown after at least one file is added */
+                                        <div
+                                            className={`add-more-btn${isDragging ? " dragging" : ""}`}
+                                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                                            onDragLeave={() => setIsDragging(false)}
+                                            onDrop={handleDropZone}
+                                            style={{
+                                                position: "relative",
+                                                borderRadius: 12,
+                                                border: `2px dashed ${isDragging ? "#12A1A6" : "#cbd5e1"}`,
+                                                padding: "14px 20px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 10,
+                                                cursor: "pointer",
+                                                background: isDragging ? "rgba(18,161,166,0.04)" : "transparent",
+                                            }}
+                                            onClick={() => addMoreInputRef.current?.click()}
+                                        >
+                                            <input
+                                                ref={addMoreInputRef}
+                                                type="file"
+                                                multiple
+                                                onChange={(e) => { if (e.target.files?.length) validateAndAddFiles(e.target.files); }}
+                                                accept=".pdf,.docx,.jpg,.jpeg,.png"
+                                                disabled={isUploading}
+                                                style={{ display: "none" }}
+                                            />
+                                            {/* Plus icon */}
+                                            <div
+                                                style={{
+                                                    width: 28,
+                                                    height: 28,
+                                                    borderRadius: "50%",
+                                                    border: "2px solid #cbd5e1",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                    flexShrink: 0,
+                                                    background: "#fff",
+                                                }}
+                                            >
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5">
+                                                    <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#475569" }}>Add another page or document</span>
+                                                <span style={{ fontSize: "0.72rem", color: "#94a3b8", display: "block", marginTop: 1 }}>
+                                                    {MAX_FILES - fileList.length} slot{MAX_FILES - fileList.length !== 1 ? "s" : ""} remaining · drag &amp; drop or click
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ) : fileList.length >= MAX_FILES ? (
+                                        <p style={{ fontSize: "0.78rem", color: "#94a3b8", textAlign: "center", margin: 0, padding: "8px 0" }}>
+                                            Maximum {MAX_FILES} files reached. Remove a file to add another.
+                                        </p>
+                                    ) : null}
+
+                                    {/* Helper text */}
+                                    {fileList.length > 1 && (
+                                        <p style={{ fontSize: "0.78rem", color: "#64748b", marginTop: 8, lineHeight: 1.5 }}>
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#12A1A6" strokeWidth="2.5" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            Files will be processed in order and combined into a single analysis.
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Turnstile CAPTCHA */}
@@ -369,14 +604,12 @@ export function UploadSection({
                                         ref={turnstileRef}
                                         siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
                                         onSuccess={(token) => {
-                                            turnstileTokenRef.current = token; // ← set ref immediately
-
+                                            turnstileTokenRef.current = token;
                                             setTurnstileToken(token);
                                             setTurnstileError(false);
                                         }}
                                         onExpire={() => {
                                             turnstileTokenRef.current = null;
-
                                             setTurnstileToken(null);
                                             turnstileRef.current?.reset();
                                         }}
@@ -398,15 +631,7 @@ export function UploadSection({
                                 {uploadStatus && (
                                     <div className={isError ? "status-error" : "status-info"} style={{ animation: "fadeIn 0.3s ease" }}>
                                         {isError ? (
-                                            <svg
-                                                width="16"
-                                                height="16"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                style={{ flexShrink: 0, marginTop: 1 }}
-                                            >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
                                                 <circle cx="12" cy="12" r="10" />
                                                 <path d="M12 8v4m0 4h.01" />
                                             </svg>
@@ -430,7 +655,7 @@ export function UploadSection({
                                     </div>
                                 )}
 
-                                <button type="submit" disabled={isUploading} className="btn-primary" style={{ marginTop: 4 }}>
+                                <button type="submit" disabled={isUploading || fileList.length === 0} className="btn-primary" style={{ marginTop: 4 }}>
                                     {isUploading ? (
                                         <>
                                             <Spinner size={18} /> Processing…
@@ -496,31 +721,11 @@ export function UploadSection({
                                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                                     <thead>
                                         <tr>
-                                            <th
-                                                style={{ textAlign: "left", paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)" }}
-                                            ></th>
-                                            <th
-                                                style={{
-                                                    paddingBottom: 16,
-                                                    borderBottom: "1px solid rgba(255,255,255,0.1)",
-                                                    color: "#54D6D4",
-                                                    fontWeight: 800,
-                                                    textAlign: "center",
-                                                    width: "25%",
-                                                }}
-                                            >
+                                            <th style={{ textAlign: "left", paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)" }}></th>
+                                            <th style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)", color: "#54D6D4", fontWeight: 800, textAlign: "center", width: "25%" }}>
                                                 Free
                                             </th>
-                                            <th
-                                                style={{
-                                                    paddingBottom: 16,
-                                                    borderBottom: "1px solid rgba(255,255,255,0.1)",
-                                                    color: "#54D6D4",
-                                                    fontWeight: 800,
-                                                    textAlign: "center",
-                                                    width: "25%",
-                                                }}
-                                            >
+                                            <th style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)", color: "#54D6D4", fontWeight: 800, textAlign: "center", width: "25%" }}>
                                                 Full (Paid)
                                             </th>
                                         </tr>
@@ -528,34 +733,15 @@ export function UploadSection({
                                     <tbody>
                                         {comparisonData.map((row, i) => (
                                             <tr key={i}>
-                                                <td
-                                                    style={{
-                                                        padding: "14px 0",
-                                                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                                                        color: "rgba(255,255,255,0.8)",
-                                                        fontWeight: 500,
-                                                    }}
-                                                >
+                                                <td style={{ padding: "14px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>
                                                     {row.feature}
                                                 </td>
-                                                <td
-                                                    style={{
-                                                        padding: "14px 0",
-                                                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                                                        verticalAlign: "middle",
-                                                    }}
-                                                >
+                                                <td style={{ padding: "14px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", verticalAlign: "middle" }}>
                                                     <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
                                                         {row.free && <CheckIcon size={16} color="#54D6D4" />}
                                                     </div>
                                                 </td>
-                                                <td
-                                                    style={{
-                                                        padding: "14px 0",
-                                                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                                                        verticalAlign: "middle",
-                                                    }}
-                                                >
+                                                <td style={{ padding: "14px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", verticalAlign: "middle" }}>
                                                     <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
                                                         {row.full && <CheckIcon size={16} color="#54D6D4" />}
                                                     </div>
