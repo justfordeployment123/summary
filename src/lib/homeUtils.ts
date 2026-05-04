@@ -116,6 +116,30 @@ export function markdownToHtml(md: string): string {
             continue;
         }
 
+        // ── # Main Heading ─────────────────────────────────────────────────
+        const h1 = line.match(/^#\s+(.*)/);
+        if (h1) {
+            out.push(`
+              <div style="margin: 32px 0 16px 0; border-bottom: 3px solid #12A1A6; padding-bottom: 12px;">
+                <h1 style="
+                  font-size: 2.15rem;
+                  font-weight: 900;
+                  color: #0F233F;
+                  margin: 0;
+                  letter-spacing: -0.03em;
+                  line-height: 1.2;
+                  display: flex;
+                  align-items: center;
+                  gap: 14px;
+                ">
+                  <span style="width: 6px; height: 34px; background: #12A1A6; border-radius: 4px; display: inline-block; flex-shrink: 0;"></span>
+                  ${inline(h1[1])}
+                </h1>
+              </div>
+            `);
+            continue;
+        }
+
         // ── ## Major Section Heading ───────────────────────────────────────
         const h2 = line.match(/^##\s+(.*)/);
         if (h2) {
