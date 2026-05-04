@@ -183,8 +183,8 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
                         </button>
                     </div>
                 ) : (
-                    /* Input + button row */
-                    <div style={{ display: "flex", gap: 8 }}>
+                    /* Input + button stacked vertically */
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                         <input
                             type="text"
                             value={couponCode}
@@ -199,7 +199,7 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
                             onKeyDown={(e) => e.key === "Enter" && handleApplyCoupon()}
                             placeholder="Enter coupon code"
                             style={{
-                                flex: 1,
+                                width: "100%",
                                 height: 44,
                                 padding: "0 14px",
                                 borderRadius: 10,
@@ -227,6 +227,7 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
                             onClick={handleApplyCoupon}
                             disabled={applyDisabled}
                             style={{
+                                width: "100%",
                                 height: 44,
                                 padding: "0 22px",
                                 borderRadius: 10,
@@ -237,11 +238,9 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
                                 cursor: applyDisabled ? "not-allowed" : "pointer",
                                 background: applyDisabled ? "#f1f5f9" : "linear-gradient(135deg, #0F233F, #1a3a5c)",
                                 color: applyDisabled ? "#94a3b8" : "#fff",
-                                flexShrink: 0,
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                minWidth: 84,
                                 boxShadow: applyDisabled ? "none" : "0 2px 10px rgba(15,35,63,0.28)",
                                 letterSpacing: "0.01em",
                                 transition: "background 0.15s, box-shadow 0.15s",
@@ -257,7 +256,7 @@ export function EmbeddedPaymentForm({ totalPrice, onSuccess, onError, isProcessi
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                             ) : (
-                                "Apply"
+                                "Apply Coupon"
                             )}
                         </button>
                     </div>
