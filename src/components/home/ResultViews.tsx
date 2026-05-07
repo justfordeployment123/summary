@@ -147,7 +147,7 @@ export function CompletedView({ summaryData, completedData, handleDownload, hand
 
             {/* 2. Personalized Summary Section */}
             <div style={{ borderLeft: "8px solid #08121f", paddingLeft: 40, marginBottom: 64 }}>
-                <div
+                {/* <div
                     style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -159,7 +159,7 @@ export function CompletedView({ summaryData, completedData, handleDownload, hand
                     }}
                 >
                     <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#475569", letterSpacing: "0.1em" }}>FREE SUMMARY</span>
-                </div>
+                </div> */}
                 <h1 style={{ fontSize: "2.8rem", fontWeight: 900, color: "#08121f", lineHeight: 1.1, margin: "0 0 16px", letterSpacing: "-0.04em" }}>
                     Your Letter, <span style={{ color: "#12A1A6" }}>Explained.</span>
                 </h1>
