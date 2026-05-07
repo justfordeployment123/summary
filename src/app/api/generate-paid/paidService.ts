@@ -349,7 +349,7 @@ export async function generatePaidBreakdown(
         }),
     ]);
 
-    // ── 12. Email the breakdown to the user (fire-and-forget) ────────────────
+    // ── 12. Email the breakdown (with PDF attachment) to the user — fire-and-forget
     sendBreakdownEmail({
         toEmail: job.user_email,
         userName: job.user_name,
@@ -357,6 +357,7 @@ export async function generatePaidBreakdown(
         categoryName: job.category?.name ?? "General",
         urgency,
         breakdownMarkdown: detailedBreakdown,
+        processedAt: new Date(),
     }).catch((err) => console.error("[generate-paid] Breakdown email error:", err));
 
     return { detailedBreakdown };

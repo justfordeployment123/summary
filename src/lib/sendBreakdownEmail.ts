@@ -9,6 +9,7 @@
 
 import nodemailer from "nodemailer";
 import { markdownToHtml } from "@/lib/homeUtils";
+import { generatePDF } from "@/lib/pdfGenerator";
 
 export interface BreakdownEmailOptions {
     toEmail: string;
@@ -17,6 +18,8 @@ export interface BreakdownEmailOptions {
     categoryName: string;
     urgency: string | null;
     breakdownMarkdown: string;
+    /** Defaults to today (en-GB) if omitted. */
+    processedAt?: Date;
 }
 
 const URGENCY_STYLES: Record<string, { bg: string; text: string; border: string }> = {
@@ -55,6 +58,20 @@ export async function sendBreakdownEmail(opts: BreakdownEmailOptions): Promise<v
         const urgencyStyle = URGENCY_STYLES[urgencyKey] ?? URGENCY_STYLES.Routine;
         const safeName = (opts.userName || "there").split(/\s+/)[0];
 
+        // Build the same PDF the user would download from /api/download/pdf,
+        // so the attachment matches what they get on-screen.
+        const dateStr = (opts.processedAt ?? new Date()).toLocaleDateString("en-GB");
+        let pdfBuffer: Buffer | null = null;
+        try {
+            pdfBuffer = await generatePDF(opts.breakdownMarkdown, opts.referenceId, dateStr);
+        } catch (pdfErr) {
+            // PDF failure must not block the email — fall back to HTML/text-only.
+            console.error("[sendBreakdownEmail] PDF generation failed, sending without attachment:", pdfErr);
+        }
+
+        const safeRefForFilename = opts.referenceId.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const pdfFilename = `ExplainMyLetter-Breakdown-${safeRefForFilename}.pdf`;
+
         const html = `
 <!doctype html>
 <html>
@@ -81,8 +98,8 @@ export async function sendBreakdownEmail(opts: BreakdownEmailOptions): Promise<v
                                 Hi ${escapeHtml(safeName)},
                             </p>
                             <p style="margin:0 0 18px 0;font-size:15px;line-height:1.7;color:#334155;">
-                                Thanks for using Explain My Letter. Below is the detailed breakdown of your <strong>${escapeHtml(opts.categoryName)}</strong> letter.
-                                A copy is also kept in your browser session.
+                                Thanks for using Explain My Letter. Below is the detailed breakdown of your <strong>${escapeHtml(opts.categoryName)}</strong> letter,
+                                and a PDF copy is attached for your records.
                             </p>
 
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
@@ -127,15 +144,28 @@ export async function sendBreakdownEmail(opts: BreakdownEmailOptions): Promise<v
 
         const subject = `Your ${opts.categoryName} breakdown — Ref ${opts.referenceId}`;
 
+        const attachments = pdfBuffer
+            ? [
+                  {
+                      filename: pdfFilename,
+                      content: pdfBuffer,
+                      contentType: "application/pdf",
+                  },
+              ]
+            : undefined;
+
         await transporter.sendMail({
             from,
             to: opts.toEmail,
             subject,
             html,
             text: buildPlainText(opts),
+            attachments,
         });
 
-        console.log(`[sendBreakdownEmail] Breakdown emailed to ${opts.toEmail} (ref ${opts.referenceId})`);
+        console.log(
+            `[sendBreakdownEmail] Breakdown emailed to ${opts.toEmail} (ref ${opts.referenceId})${pdfBuffer ? " with PDF attachment" : " (no PDF — generation failed)"}`,
+        );
     } catch (err) {
         console.error("[sendBreakdownEmail] Failed to send breakdown email:", err);
     }
