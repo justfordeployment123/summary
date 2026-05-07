@@ -7,8 +7,6 @@ import prisma from "@/lib/prisma";
 export async function POST(request: Request) {
     try {
         const { email, password, setupSecret } = await request.json();
-        console.log(email, password, setupSecret);
-        // console.log()
 
         // Replace 'my_secret_setup_key' with a random word just for this test
         if (setupSecret !== "my_secret_setup_key") {

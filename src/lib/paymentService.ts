@@ -15,7 +15,6 @@ export interface ConfirmArgs {
 }
 
 export async function confirmAndGenerate(args: ConfirmArgs) {
-    console.log(`[paymentService] confirmAndGenerate called with args:`, args);
     const { jobId, accessToken, upsells, stripeSessionId, paymentIntentId, amountTotal, currency } = args;
 
     const job = await prisma.job.findFirst({
@@ -29,11 +28,9 @@ export async function confirmAndGenerate(args: ConfirmArgs) {
         JobState.COMPLETED,
     ];
     if (terminalStates.includes(job.status)) {
-        console.log(`[payment] Job ${jobId} already at ${job.status} — skipping.`);
         return { skipped: true };
     }
 
-    console.log(`[payment] Job ${jobId} is in state ${job.status} — proceeding.`);
     if (job.status !== JobState.AWAITING_PAYMENT) {
         throw new Error(`Validation: Job ${jobId} is in unexpected state '${job.status}'.`);
     }

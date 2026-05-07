@@ -122,7 +122,7 @@ export async function POST(request: Request) {
         const HIGH_THRESHOLD: number = (highSetting?.value as number) ?? 85;
         const LOW_THRESHOLD: number = (lowSetting?.value as number) ?? 70;
 
-        console.log(`Starting OCR Processing for Job ID: ${jobId} — ${entries.length} file(s)`);
+        // console.log(`Starting OCR Processing for Job ID: ${jobId} — ${entries.length} file(s)`);
 
         // ── Extract text from each file, collect results and clean up S3 ──
         const extractedSegments: string[] = [];
@@ -185,14 +185,7 @@ export async function POST(request: Request) {
             combinedText = textWords.slice(0, 1200).join(" ");
         }
 
-        console.log(
-            `Extraction complete for Job ID: ${jobId}. ` +
-                `Files: ${entries.length}. ` +
-                `Total word count: ${textWords.length}. ` +
-                `Confidence flag: ${anyConfidenceFlag}`,
-        );
-        console.log("Combined text sample:", combinedText.slice(0, 500));
-
+        // 
         // ── Store in Temp collection ──
         await prisma.temp.upsert({
             where: { job_id: jobId },

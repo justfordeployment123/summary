@@ -182,7 +182,6 @@ export async function POST(req: Request) {
             where: { id: jobId },
             include: { category: true },
         });
-        console.log(job);
         if (!job) {
             return NextResponse.json({ error: "Job not found." }, { status: 404 });
         }

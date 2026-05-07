@@ -8,6 +8,7 @@ import prisma from "@/lib/prisma";
 import { JobState, PromptType, UrgencyLabel } from "@prisma/client";
 import { checkAndIncrementMonthlyUsage } from "@/lib/tokenBudget";
 import { maybeSendCapAlert } from "@/lib/sendCapAlert";
+import { sendBreakdownEmail } from "@/lib/sendBreakdownEmail";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -347,6 +348,16 @@ export async function generatePaidBreakdown(
             create: { job_id: jobId, extracted_text: detailedBreakdown },
         }),
     ]);
+
+    // ── 12. Email the breakdown to the user (fire-and-forget) ────────────────
+    sendBreakdownEmail({
+        toEmail: job.user_email,
+        userName: job.user_name,
+        referenceId: job.reference_id,
+        categoryName: job.category?.name ?? "General",
+        urgency,
+        breakdownMarkdown: detailedBreakdown,
+    }).catch((err) => console.error("[generate-paid] Breakdown email error:", err));
 
     return { detailedBreakdown };
 }

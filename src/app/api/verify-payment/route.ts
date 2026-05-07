@@ -10,7 +10,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02
 
 export async function POST(req: Request) {
     try {
-        console.log("[verify-payment] Verification request received");
 
         const { jobId, accessToken, paymentIntentId } = await req.json();
 

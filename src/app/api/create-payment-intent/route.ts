@@ -18,7 +18,6 @@ export async function POST(req: Request) {
     try {
         const body: CreatePaymentIntentBody = await req.json();
         const { jobId, accessToken, upsells = [], disclaimerAcknowledged } = body;
-        console.log("Create payment intent request received", { jobId, upsells, disclaimerAcknowledged });
 
         // ── 1. Validate disclaimer server-side (§13.2) ──
         if (!disclaimerAcknowledged) {

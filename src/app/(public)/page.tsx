@@ -260,7 +260,6 @@ export default function Home() {
 
             // ── Steps 4–5: free summary generation (unchanged) ───────────────────
             const aiResult = await generateFreeSummary({ jobId, extractedText: ocrResult.extractedText });
-            console.log("[handleSubmit] AI result received", aiResult);
             setCurrentStep(4);
             setUploadStatus(PROCESS_STEPS[4]);
 
