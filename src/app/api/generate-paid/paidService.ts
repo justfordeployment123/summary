@@ -342,10 +342,9 @@ export async function generatePaidBreakdown(
                 urgency: urgencyLabel,
             },
         }),
-        prisma.temp.upsert({
+        prisma.temp.update({
             where: { job_id: jobId },
-            update: { extracted_text: detailedBreakdown },
-            create: { job_id: jobId, extracted_text: detailedBreakdown },
+            data: { paid_breakdown: detailedBreakdown },
         }),
     ]);
 

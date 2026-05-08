@@ -185,7 +185,11 @@ model Temp {
   id             String   @id @default(uuid())
   job_id         String   @unique
   extracted_text String   @db.Text
+  free_summary   String?  @db.Text
+  paid_breakdown String?  @db.Text
   createdAt      DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model WebhookEvent {

@@ -339,10 +339,9 @@ Classification rules:
                     urgency: parsedResponse.urgency === "Time-Sensitive" ? "Time_Sensitive" : parsedResponse.urgency,
                 },
             }),
-            prisma.temp.upsert({
+            prisma.temp.update({
                 where: { job_id: jobId },
-                update: { extracted_text: parsedResponse.summary },
-                create: { job_id: jobId, extracted_text: parsedResponse.summary },
+                data: { free_summary: parsedResponse.summary },
             }),
         ]);
 

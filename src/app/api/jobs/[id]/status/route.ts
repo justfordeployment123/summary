@@ -57,7 +57,7 @@ export async function GET(
             const tempDoc = await prisma.temp.findUnique({
                 where: { job_id: jobId },
             });
-            const paidSummary = tempDoc?.extracted_text ?? null;
+            const paidSummary = tempDoc?.paid_breakdown ?? null;
 
             if (!paidSummary) {
                 // Auto-refund — paid summary missing despite COMPLETED state
@@ -120,7 +120,7 @@ export async function GET(
             const tempDoc = await prisma.temp.findUnique({ where: { job_id: jobId } });
             return NextResponse.json({
                 ...base,
-                freeSummary: tempDoc?.extracted_text ?? null,
+                freeSummary: tempDoc?.free_summary ?? null,
             });
         }
 
