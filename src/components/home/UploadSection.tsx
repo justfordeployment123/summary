@@ -182,7 +182,12 @@ export function UploadSection({
                         {/* Left — form */}
                         <div className="upload-form-col" style={{ flex: "1 1 400px", minWidth: 300 }}>
                             <div style={{ marginBottom: 36 }}>
-                                <img src="/safe-encrypted.png" width="150" alt="" />
+                                <img 
+                                    src="/safe-encrypted.png" 
+                                    width="150" 
+                                    style={{ maxWidth: "100%", height: "auto" }}
+                                    alt="" 
+                                />
                                 <h2
                                     style={{
                                         fontSize: "2rem",
