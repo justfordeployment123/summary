@@ -182,9 +182,7 @@ export function UploadSection({
                         {/* Left — form */}
                         <div className="upload-form-col" style={{ flex: "1 1 400px", minWidth: 300 }}>
                             <div style={{ marginBottom: 36 }}>
-                                <span className="feature-chip" style={{ marginBottom: 14, fontSize: "1.1rem", display: "inline-flex" }}>
-                                    Free Summary
-                                </span>
+                                <img src="/safe-encrypted.png" width="150" alt="" />
                                 <h2
                                     style={{
                                         fontSize: "2rem",
@@ -198,7 +196,7 @@ export function UploadSection({
                                     Upload your letter
                                 </h2>
                                 <p style={{ color: "#64748b", marginTop: 10, fontSize: "0.95rem", lineHeight: 1.6 }}>
-                                    Your document is encrypted in transit and automatically deleted within 24 hours. We never sell your data.
+                                    Your letter is encrypted in transit and automatically deleted within 24 hours. We never sell your data. Your letter and any personal details remain completely private, encrypted, and secure at all times. No human will view or read your letter, it is processed securely by our automated system ONLY, following UK ICO data protection guidelines
                                 </p>
                             </div>
 
